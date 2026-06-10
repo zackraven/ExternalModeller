@@ -22,6 +22,76 @@ const L_PLAN: BuildingSpec = {
   ],
 };
 
+const DUAL_PITCH: BuildingSpec = {
+  masses: [
+    {
+      footprint: [[0, 0], [10, 0], [10, 6], [0, 6]],
+      storeys: [{ height: 2.4 }],
+      roof: { type: "dual", pitch: 35, ridgeEdge: 0 },
+    },
+  ],
+};
+
+const HIP_ROOF: BuildingSpec = {
+  masses: [
+    {
+      footprint: [[0, 0], [10, 0], [10, 6], [0, 6]],
+      storeys: [{ height: 2.4 }],
+      roof: { type: "hip", pitch: 35 },
+    },
+  ],
+};
+
+const DORMER_COTTAGE: BuildingSpec = {
+  masses: [
+    {
+      footprint: [[0, 0], [10, 0], [10, 6], [0, 6]],
+      storeys: [{ height: 2.4 }],
+      roof: { type: "dual", pitch: 35, ridgeEdge: 0 },
+      openings: [
+        { storey: 0, edge: 0, type: "window", width: 1.2, height: 1.2, sill: 0.9, count: 3 },
+        { storey: 0, edge: 2, type: "window", width: 1.2, height: 1.2, sill: 0.9, count: 2 },
+        { storey: 0, edge: 1, type: "door", width: 0.9, height: 2.1 },
+      ],
+      components: [
+        {
+          kind: "dormer",
+          roofPlane: 0,
+          shape: "gable",
+          width: 2,
+          height: 1.5,
+          window: { width: 1.2, height: 1.0 },
+        },
+      ],
+    },
+  ],
+};
+
+const TWO_STOREY_HIP: BuildingSpec = {
+  masses: [
+    {
+      footprint: [[0, 0], [12, 0], [12, 8], [0, 8]],
+      storeys: [{ height: 2.7 }, { height: 2.4 }],
+      roof: { type: "hip", pitch: 30 },
+      openings: [
+        { storey: 0, edge: 0, type: "window", width: 1.4, height: 1.4, sill: 0.9, count: 3 },
+        { storey: 0, edge: 2, type: "window", width: 1.4, height: 1.4, sill: 0.9, count: 3 },
+        { storey: 0, edge: 3, type: "door", width: 1.0, height: 2.1 },
+        { storey: 1, edge: 0, type: "window", width: 1.2, height: 1.2, sill: 0.8, count: 3 },
+        { storey: 1, edge: 2, type: "window", width: 1.2, height: 1.2, sill: 0.8, count: 3 },
+      ],
+      components: [
+        {
+          kind: "rooflight",
+          roofPlane: 0,
+          width: 1.2,
+          height: 0.8,
+        },
+      ],
+    },
+  ],
+};
+
 interface DropZoneProps {
   onLoad: (spec: BuildingSpec) => void;
 }
@@ -81,6 +151,10 @@ export function DropZone({ onLoad }: DropZoneProps) {
       <div className="fixtures">
         <button onClick={() => onLoad(HELLO_BOX)}>hello-box</button>
         <button onClick={() => onLoad(L_PLAN)}>l-plan</button>
+        <button onClick={() => onLoad(DUAL_PITCH)}>dual-pitch</button>
+        <button onClick={() => onLoad(HIP_ROOF)}>hip-roof</button>
+        <button onClick={() => onLoad(DORMER_COTTAGE)}>dormer cottage</button>
+        <button onClick={() => onLoad(TWO_STOREY_HIP)}>2-storey hip</button>
       </div>
     </div>
   );

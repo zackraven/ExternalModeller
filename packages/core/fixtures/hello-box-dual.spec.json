@@ -1,0 +1,9 @@
+{
+  "masses": [
+    {
+      "footprint": [[0,0],[10,0],[10,6],[0,6]],
+      "storeys": [{ "height": 2.4 }],
+      "roof": { "type": "dual", "pitch": 35, "ridgeEdge": 0 }
+    }
+  ]
+}

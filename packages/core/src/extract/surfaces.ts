@@ -41,8 +41,18 @@ export function extractSurfaces(
 
 function faceName(face: Face): string {
   const t = face.tag;
-  if (t.type === "wall") return `Wall S${t.storey} E${t.edge}`;
+  if (t.type === "wall") {
+    if (face.id.includes("_gable_")) return `Gable E${t.edge}`;
+    return `Wall S${t.storey} E${t.edge}`;
+  }
   if (t.type === "floor") return "Floor";
-  if (t.type === "roof") return "Roof";
+  if (t.type === "roof") return `Roof P${face.id.slice(face.id.lastIndexOf("p") + 1)}`;
+  if (t.type === "dormer_front" || t.type === "dormer_cheek" || t.type === "dormer_roof") {
+    const m = face.id.match(/_dormer_(\d+)_/);
+    const ci = m ? m[1] : "0";
+    if (t.type === "dormer_front") return `Dormer ${ci} Front`;
+    if (t.type === "dormer_cheek") return `Dormer ${ci} Cheek`;
+    return `Dormer ${ci} Roof`;
+  }
   return face.id;
 }

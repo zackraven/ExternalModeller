@@ -8,6 +8,9 @@ const COLOR_MAP: Record<string, string> = {
   "floor:ground": "#8B7355",
   "floor:exposed": "#B8956A",
   "roof:external": "#6B7B8D",
+  "dormer_front:external": "#A0522D",
+  "dormer_cheek:external": "#B87333",
+  "dormer_roof:external": "#8B6914",
 };
 
 const FALLBACK = "#888888";

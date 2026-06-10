@@ -1,5 +1,5 @@
 import type { Face, FaceModel, JunctionRow, HalfEdge, Vec3 } from "../types.js";
-import { cross, snap, dist3 } from "../geometry.js";
+import { cross, snap, dist3, tiltOf } from "../geometry.js";
 
 export function extractJunctions(model: FaceModel): JunctionRow[] {
   const totals = new Map<string, number>();
@@ -93,6 +93,23 @@ function classifyJunction(he: HalfEdge, f1: Face, f2: Face): string | null {
       if (floor.tag.adjacency === "ground") return "wall_ground_floor";
       if (floor.tag.adjacency === "exposed") return "wall_exposed_floor";
     }
+  }
+
+  // Wall–roof junction
+  const wallFace = f1.tag.type === "wall" ? f1 : f2.tag.type === "wall" ? f2 : null;
+  const roofFace = f1.tag.type === "roof" ? f1 : f2.tag.type === "roof" ? f2 : null;
+
+  if (wallFace && roofFace) {
+    const roofTilt = tiltOf(roofFace.normal);
+    if (roofTilt < 1) return "roof_flat_wall";
+    // Sloped roof–wall: check if edge is along the gable (sloped edge) or eaves (horizontal)
+    if (isHorizontal(he)) return "eaves";
+    return "gable";
+  }
+
+  // Roof–roof junction → ridge (or hip ridge)
+  if (f1.tag.type === "roof" && f2.tag.type === "roof") {
+    return "ridge";
   }
 
   return null;

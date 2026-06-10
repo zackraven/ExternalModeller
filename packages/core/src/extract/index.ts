@@ -20,7 +20,7 @@ export function extract(model: FaceModel, northAngle: number = 0): Schedule {
     if (s.type === "wall" && s.adjacency === "external") totals.externalWallNet += s.area;
     if (s.type === "wall" && s.adjacency === "party") totals.party += s.area;
     if (s.type === "floor") totals.floor += s.area;
-    if (s.type === "roof") totals.roof += s.area;
+    if (s.type === "roof" || s.type === "dormer_roof") totals.roof += s.area;
   }
 
   for (const o of openings) {
