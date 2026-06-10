@@ -5,6 +5,7 @@ import { buildRoof } from "./roof.js";
 import { placeComponents } from "./components.js";
 import { placeOpenings } from "./openings.js";
 import { buildTopology } from "./topology.js";
+import { detectAbutments } from "./abutment.js";
 
 export function resolve(spec: BuildingSpec): FaceModel {
   const faces: Face[] = [];
@@ -19,6 +20,8 @@ export function resolve(spec: BuildingSpec): FaceModel {
     placeComponents(faces, mass, massId);
     placeOpenings(faces, mass, massId);
   }
+
+  detectAbutments(faces);
 
   return buildTopology(faces);
 }

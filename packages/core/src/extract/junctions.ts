@@ -23,6 +23,38 @@ export function extractJunctions(model: FaceModel): JunctionRow[] {
     }
   }
 
+  // Party-wall junctions: scan party-tagged wall faces and compute
+  // the perimeter of each unique shared wall interface.
+  // Deduplicate via canonical 2D edge key + z-range so each physical
+  // shared wall is counted once.
+  const partyEdgeSeen = new Set<string>();
+  for (const face of model.faces) {
+    if (face.tag.type !== "wall" || face.tag.adjacency !== "party") continue;
+
+    // Bottom edge: vertices[0] -> vertices[1]
+    const a = face.vertices[0];
+    const b = face.vertices[1];
+    const zBase = a[2];
+    const zTop = face.vertices[2][2];
+
+    // Canonical key: sort 2D endpoints + z-range
+    const ka = `${snap(a[0])},${snap(a[1])}`;
+    const kb = `${snap(b[0])},${snap(b[1])}`;
+    const edgeCanon = ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`;
+    const partyKey = `${edgeCanon}|${snap(zBase)},${snap(zTop)}`;
+
+    if (partyEdgeSeen.has(partyKey)) continue;
+    partyEdgeSeen.add(partyKey);
+
+    // Perimeter of the shared wall rectangle
+    const edgeLen = Math.sqrt(
+      (b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2,
+    );
+    const wallHeight = zTop - zBase;
+    const perim = 2 * (edgeLen + wallHeight);
+    totals.set("party_wall", (totals.get("party_wall") ?? 0) + perim);
+  }
+
   // Opening-surround junctions (head, sill, jamb)
   for (const face of model.faces) {
     for (const opening of face.openings) {
@@ -77,6 +109,9 @@ function isHorizontal(he: HalfEdge): boolean {
 function classifyJunction(he: HalfEdge, f1: Face, f2: Face): string | null {
   // Wall–wall vertical edge → corner
   if (f1.tag.type === "wall" && f2.tag.type === "wall" && isVertical(he)) {
+    // Guard: skip if walls are from different masses (cross-mass twin)
+    if (f1.tag.mass !== f2.tag.mass) return null;
+
     // he goes from lower z to higher z (we ensured from < to).
     // The face owning the upward half-edge is the "incoming" wall.
     // he belongs to f1; its twin (reversed) belongs to f2.
