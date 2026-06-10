@@ -3,6 +3,7 @@ export { resolve } from "./resolve/index.js";
 export { solve } from "./solve.js";
 export { extract } from "./extract/index.js";
 export { azimuthOf, tiltOf } from "./geometry.js";
+export { surfacesCsv, openingsCsv, junctionsCsv, totalsCsv, scheduleCsv } from "./csv.js";
 
 // ── Types ──────────────────────────────────────────────────
 export type {

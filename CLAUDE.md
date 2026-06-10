@@ -21,6 +21,8 @@ BuildingSpec (JSON) → solve() → Schedule (surfaces, openings, junctions, tot
 | `types.ts` | All interfaces: Vec2/Vec3, BuildingSpec/Mass/Storey/Roof/Opening/Component/EdgeAdjacency, Face(+occludedArea)/FaceTag/FaceOpening/HalfEdge/FaceModel, Schedule/SurfaceRow/OpeningRow/JunctionRow/Totals |
 | `geometry.ts` | snap/snapVec3, cross/dot/sub/length/normalize, shoelace/isCCW/ensureCCW, newell (area+normal), azimuthOf/tiltOf, dist3, perimeter2D |
 | `solve.ts` | `solve(spec)` = `extract(resolve(spec), northAngle)` |
+| `csv.ts` | CSV formatters: `surfacesCsv`, `openingsCsv`, `junctionsCsv`, `totalsCsv`, `scheduleCsv` |
+| `cli.ts` | CLI entry point: `surface-modeller <input.json> [--csv] [-o file]` |
 | `index.ts` | Public API re-exports |
 
 ### Resolve pipeline (`src/resolve/`)
@@ -56,6 +58,8 @@ BuildingSpec (JSON) → solve() → Schedule (surfaces, openings, junctions, tot
 - `occlusion.test.ts` — clipPolygon unit tests, church cross-mass occlusion, party skip, single-mass unchanged
 - `validation.test.ts` — hand-checked expected values for all 8 fixtures (51 tests)
 - `schema.test.ts` — JSON-schema validation: all fixtures pass, invalid specs rejected (24 tests)
+- `csv.test.ts` — CSV formatter unit tests (15 tests)
+- `cli.test.ts` — CLI integration tests via subprocess (9 tests)
 
 ### Fixtures (`fixtures/`)
 
@@ -91,9 +95,9 @@ React + Three.js viewer. `npm run dev` → Vite on localhost:5173.
 - **Snap tolerance**: `SNAP = 1e-4`, `EPS = 1e-6`.
 - **Face IDs**: `${massId}_wall_s${si}_e${ei}`, `${massId}_floor`, `${massId}_roof_p${i}`, `${massId}_gable_e${ei}`, `${massId}_dormer_${ci}_front/cheek/roof`.
 - **FaceTag.type**: `"wall" | "floor" | "roof" | "dormer_front" | "dormer_cheek" | "dormer_roof"`.
-- **Run tests**: `cd packages/core && npx vitest run` (211 tests across 9 files).
+- **Run tests**: `cd packages/core && npx vitest run` (235 tests across 11 files).
 - **Type-check viewer**: `cd packages/viewer && npx tsc --noEmit`.
-- **Deps**: core has `polygon-clipping` (runtime), `ajv`/`vitest`/`typescript` (dev).
+- **Deps**: core has `polygon-clipping` (runtime), `ajv`/`@types/node`/`vitest`/`typescript` (dev).
 
 ## Completed phases
 
@@ -102,3 +106,4 @@ React + Three.js viewer. `npm run dev` → Vite on localhost:5173.
 - **Phase 5**: dormers and rooflights
 - **Phase 6**: multi-mass abutment detection, party wall junctions, cross-mass face occlusion
 - **Phase 7**: validation suite (hand-checked expected values for all fixtures), SPEC.md, JSON schema
+- **Phase 8**: CLI (`surface-modeller` bin) and CSV export

@@ -5,12 +5,16 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "bin": {
+    "surface-modeller": "dist/cli.js"
+  },
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "devDependencies": {
+    "@types/node": "^25.9.2",
     "ajv": "^8.20.0",
     "typescript": "^5.7.0",
     "vitest": "^3.2.0"
