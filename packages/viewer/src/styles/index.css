@@ -1,0 +1,155 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: system-ui, -apple-system, sans-serif;
+  background: #1a1a2e;
+  color: #e0e0e0;
+}
+
+.app {
+  display: flex;
+  width: 100%;
+  height: 100%;
+}
+
+.viewer-panel {
+  flex: 1;
+  position: relative;
+}
+
+.side-panel {
+  width: 280px;
+  background: #16213e;
+  border-left: 1px solid #0f3460;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+/* ── Toolbar ───────────────────────────────────── */
+
+.toolbar {
+  display: flex;
+  gap: 4px;
+  padding: 8px;
+  background: #0f3460;
+  flex-wrap: wrap;
+}
+
+.toolbar button {
+  padding: 6px 10px;
+  border: 1px solid #1a1a5e;
+  border-radius: 4px;
+  background: #16213e;
+  color: #e0e0e0;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.toolbar button:hover {
+  background: #1a1a5e;
+}
+
+.toolbar button.active {
+  background: #e94560;
+  border-color: #e94560;
+  color: #fff;
+}
+
+/* ── Info Panel ────────────────────────────────── */
+
+.info-panel {
+  padding: 12px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.info-panel h3 {
+  font-size: 14px;
+  margin-bottom: 8px;
+  color: #e94560;
+  border-bottom: 1px solid #0f3460;
+  padding-bottom: 4px;
+}
+
+.info-panel table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.info-panel td {
+  padding: 2px 4px;
+}
+
+.info-panel td:first-child {
+  color: #8899aa;
+}
+
+.info-panel td:last-child {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── DropZone ──────────────────────────────────── */
+
+.dropzone {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: #1a1a2e;
+  z-index: 10;
+}
+
+.dropzone.drag-over {
+  background: #0f3460;
+}
+
+.dropzone p {
+  font-size: 16px;
+  color: #8899aa;
+}
+
+.dropzone .fixtures {
+  display: flex;
+  gap: 8px;
+}
+
+.dropzone button {
+  padding: 10px 20px;
+  border: 2px solid #e94560;
+  border-radius: 6px;
+  background: transparent;
+  color: #e94560;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.dropzone button:hover {
+  background: #e94560;
+  color: #fff;
+}
+
+/* ── Face label overlay ────────────────────────── */
+
+.face-label {
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+}
