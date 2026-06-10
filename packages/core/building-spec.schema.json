@@ -1,0 +1,255 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "building-spec.schema.json",
+  "title": "BuildingSpec",
+  "description": "Input specification for the surface-modeller geometry engine. Describes one or more building masses with footprints, storeys, roofs, openings, and components.",
+  "type": "object",
+  "required": ["masses"],
+  "additionalProperties": false,
+  "properties": {
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "units": {
+          "const": "m",
+          "description": "Length unit. Only metres supported."
+        },
+        "northAngle": {
+          "type": "number",
+          "minimum": 0,
+          "exclusiveMaximum": 360,
+          "default": 0,
+          "description": "Clockwise rotation of true north from model +Y axis, in degrees."
+        }
+      }
+    },
+    "masses": {
+      "type": "array",
+      "minItems": 1,
+      "description": "One or more building masses. Each mass has its own footprint, storeys, and roof.",
+      "items": { "$ref": "#/definitions/Mass" }
+    }
+  },
+  "definitions": {
+    "Vec2": {
+      "type": "array",
+      "items": { "type": "number" },
+      "minItems": 2,
+      "maxItems": 2,
+      "description": "[x, y] coordinate in metres. +X = East, +Y = North."
+    },
+    "Mass": {
+      "type": "object",
+      "required": ["footprint", "storeys"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for this mass (e.g. \"nave\", \"tower\"). Auto-generated as \"mass_0\", \"mass_1\" etc. if omitted."
+        },
+        "footprint": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/Vec2" },
+          "minItems": 3,
+          "description": "Ground-plane polygon vertices in counter-clockwise order (viewed from above). The engine will auto-correct clockwise winding."
+        },
+        "storeys": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/Storey" },
+          "minItems": 1,
+          "description": "One or more storeys, bottom to top. Each storey defines a wall height."
+        },
+        "roof": {
+          "$ref": "#/definitions/Roof"
+        },
+        "openings": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/Opening" },
+          "description": "Windows, doors, or rooflights placed on wall faces."
+        },
+        "components": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/Component" },
+          "description": "Roof-mounted components (dormers, rooflights)."
+        },
+        "adjacency": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/EdgeAdjacency" },
+          "description": "Per-edge, per-storey adjacency overrides. Edges not listed default to \"external\"."
+        },
+        "floorAdjacency": {
+          "type": "string",
+          "enum": ["ground", "exposed", "unheated"],
+          "default": "ground",
+          "description": "How the ground floor connects to the environment."
+        }
+      }
+    },
+    "Storey": {
+      "type": "object",
+      "required": ["height"],
+      "additionalProperties": false,
+      "properties": {
+        "height": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Floor-to-ceiling height in metres."
+        }
+      }
+    },
+    "Roof": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["flat", "mono", "dual", "hip", "none"],
+          "description": "Roof form. \"none\" omits the roof entirely."
+        },
+        "pitch": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 90,
+          "description": "Pitch angle in degrees. Required for mono/dual/hip; ignored for flat/none."
+        },
+        "ridgeEdge": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Footprint edge index that the ridge runs parallel to. Defaults to the longest edge. Only used for mono/dual/hip."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "type": { "enum": ["mono", "dual", "hip"] } }
+          },
+          "then": {
+            "required": ["pitch"]
+          }
+        }
+      ]
+    },
+    "Opening": {
+      "type": "object",
+      "required": ["storey", "edge", "type", "width", "height"],
+      "additionalProperties": false,
+      "properties": {
+        "storey": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Zero-indexed storey the opening is on."
+        },
+        "edge": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Zero-indexed footprint edge the opening is on."
+        },
+        "type": {
+          "type": "string",
+          "enum": ["window", "door", "rooflight"],
+          "description": "Opening type."
+        },
+        "width": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Opening width in metres."
+        },
+        "height": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Opening height in metres."
+        },
+        "sill": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Height from storey floor to bottom of opening, in metres. Defaults to 0 (typical for doors)."
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Number of identical openings evenly spaced along the edge."
+        }
+      }
+    },
+    "Component": {
+      "type": "object",
+      "required": ["kind", "roofPlane", "width", "height"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["dormer", "rooflight"],
+          "description": "Component type."
+        },
+        "roofPlane": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Zero-indexed roof plane this component sits on."
+        },
+        "shape": {
+          "type": "string",
+          "enum": ["gable", "hip", "flat"],
+          "description": "Dormer roof shape. Ignored for rooflights."
+        },
+        "width": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Component width in metres."
+        },
+        "height": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Component height in metres."
+        },
+        "projection": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Horizontal projection depth in metres."
+        },
+        "window": {
+          "type": "object",
+          "required": ["width", "height"],
+          "additionalProperties": false,
+          "properties": {
+            "width": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "description": "Dormer window width in metres."
+            },
+            "height": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "description": "Dormer window height in metres."
+            }
+          },
+          "description": "Interior window of a dormer."
+        }
+      }
+    },
+    "EdgeAdjacency": {
+      "type": "object",
+      "required": ["storey", "edge", "type"],
+      "additionalProperties": false,
+      "properties": {
+        "storey": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Zero-indexed storey."
+        },
+        "edge": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Zero-indexed footprint edge."
+        },
+        "type": {
+          "type": "string",
+          "enum": ["external", "party", "internal", "unheated"],
+          "description": "Adjacency type: external (outdoor), party (shared with neighbour), internal (connects to uninsulated space), unheated (adjacent to unheated zone)."
+        }
+      }
+    }
+  }
+}
