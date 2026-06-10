@@ -1,4 +1,4 @@
-import type { FaceModel, Schedule, SurfaceRow, Face } from "@sap-geometry/core";
+import type { FaceModel, Schedule, SurfaceRow, OpeningRow, Face, FaceOpening } from "@sap-geometry/core";
 import { azimuthOf, tiltOf } from "@sap-geometry/core";
 
 interface InfoPanelProps {
@@ -27,6 +27,19 @@ function compassDir(azimuth: number): string {
   return best;
 }
 
+/** Search all faces for an opening matching the given id. */
+function findOpening(
+  model: FaceModel,
+  id: string,
+): { opening: FaceOpening; hostFace: Face } | null {
+  for (const face of model.faces) {
+    for (const opening of face.openings) {
+      if (opening.id === id) return { opening, hostFace: face };
+    }
+  }
+  return null;
+}
+
 export function InfoPanel({
   model,
   schedule,
@@ -34,21 +47,43 @@ export function InfoPanel({
   northAngle,
 }: InfoPanelProps) {
   if (selectedFaceId) {
+    // Check if it's a face
     const face = model.faces.find((f) => f.id === selectedFaceId);
-    if (!face) return null;
+    if (face) {
+      const azimuth = azimuthOf(face.normal, northAngle);
+      const tilt = tiltOf(face.normal);
 
-    // Find matching schedule row
-    const row = schedule.surfaces.find((s) => s.name === face.id);
+      return (
+        <div className="info-panel">
+          <h3>Face Detail</h3>
+          <FaceDetail face={face} azimuth={azimuth} tilt={tilt} />
+        </div>
+      );
+    }
 
-    const azimuth = azimuthOf(face.normal, northAngle);
-    const tilt = tiltOf(face.normal);
+    // Check if it's an opening
+    const result = findOpening(model, selectedFaceId);
+    if (result) {
+      const { opening, hostFace } = result;
+      const azimuth = azimuthOf(hostFace.normal, northAngle);
+      const tilt = tiltOf(hostFace.normal);
+      const scheduleRow = schedule.openings.find((o) => o.name === opening.id);
 
-    return (
-      <div className="info-panel">
-        <h3>Face Detail</h3>
-        <FaceDetail face={face} row={row} azimuth={azimuth} tilt={tilt} />
-      </div>
-    );
+      return (
+        <div className="info-panel">
+          <h3>Opening Detail</h3>
+          <OpeningDetail
+            opening={opening}
+            hostFace={hostFace}
+            scheduleRow={scheduleRow}
+            azimuth={azimuth}
+            tilt={tilt}
+          />
+        </div>
+      );
+    }
+
+    return null;
   }
 
   return (
@@ -63,23 +98,33 @@ export function InfoPanel({
 
 function FaceDetail({
   face,
-  row,
   azimuth,
   tilt,
 }: {
   face: Face;
-  row: SurfaceRow | undefined;
   azimuth: number;
   tilt: number;
 }) {
+  const openingArea = face.openings.reduce((s, o) => s + o.area, 0);
+  const occluded = face.occludedArea ?? 0;
+  const netArea = face.area - openingArea - occluded;
+  const hasOpenings = face.openings.length > 0;
+  const hasDeductions = hasOpenings || occluded > 0;
+
   return (
     <table>
       <tbody>
         <tr><td>Name</td><td>{face.id}</td></tr>
         <tr><td>Type</td><td>{face.tag.type}</td></tr>
         <tr><td>Adjacency</td><td>{face.tag.adjacency}</td></tr>
-        <tr><td>Gross area</td><td>{face.area.toFixed(2)} m²</td></tr>
-        {row && <tr><td>Net area</td><td>{row.area.toFixed(2)} m²</td></tr>}
+        <tr><td>{hasDeductions ? "Gross area" : "Area"}</td><td>{face.area.toFixed(2)} m²</td></tr>
+        {occluded > 0 && (
+          <tr><td>Occluded</td><td>{occluded.toFixed(2)} m²</td></tr>
+        )}
+        {hasOpenings && (
+          <tr><td>Openings</td><td>{face.openings.length} ({openingArea.toFixed(2)} m²)</td></tr>
+        )}
+        {hasDeductions && <tr><td>Net area</td><td>{netArea.toFixed(2)} m²</td></tr>}
         <tr>
           <td>Azimuth</td>
           <td>{azimuth.toFixed(0)}° ({compassDir(azimuth)})</td>
@@ -118,6 +163,40 @@ function SurfacesList({ surfaces }: { surfaces: SurfaceRow[] }) {
             <td>{s.area.toFixed(1)} m²</td>
           </tr>
         ))}
+      </tbody>
+    </table>
+  );
+}
+
+function OpeningDetail({
+  opening,
+  hostFace,
+  scheduleRow,
+  azimuth,
+  tilt,
+}: {
+  opening: FaceOpening;
+  hostFace: Face;
+  scheduleRow: OpeningRow | undefined;
+  azimuth: number;
+  tilt: number;
+}) {
+  return (
+    <table>
+      <tbody>
+        <tr><td>Name</td><td>{opening.id}</td></tr>
+        <tr><td>Type</td><td>{opening.type}</td></tr>
+        <tr><td>Host face</td><td>{hostFace.id}</td></tr>
+        <tr><td>Area</td><td>{opening.area.toFixed(2)} m²</td></tr>
+        <tr>
+          <td>Azimuth</td>
+          <td>{azimuth.toFixed(0)}° ({compassDir(azimuth)})</td>
+        </tr>
+        <tr><td>Tilt</td><td>{tilt.toFixed(0)}°</td></tr>
+        <tr><td>Vertices</td><td>{opening.vertices.length}</td></tr>
+        {scheduleRow && (
+          <tr><td>Schedule area</td><td>{scheduleRow.area.toFixed(2)} m²</td></tr>
+        )}
       </tbody>
     </table>
   );

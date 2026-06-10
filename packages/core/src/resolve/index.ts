@@ -6,6 +6,7 @@ import { placeComponents } from "./components.js";
 import { placeOpenings } from "./openings.js";
 import { buildTopology } from "./topology.js";
 import { detectAbutments } from "./abutment.js";
+import { computeOcclusion } from "./occlusion.js";
 
 export function resolve(spec: BuildingSpec): FaceModel {
   const faces: Face[] = [];
@@ -22,6 +23,7 @@ export function resolve(spec: BuildingSpec): FaceModel {
   }
 
   detectAbutments(faces);
+  computeOcclusion(faces);
 
   return buildTopology(faces);
 }

@@ -2,28 +2,43 @@ import earcut from "earcut";
 import type { Vec3 } from "@sap-geometry/core";
 
 /**
- * Triangulate a 3D polygon.
- * For quads or triangles, uses a simple fan.
- * For 5+ vertices (potentially concave), projects to 2D and uses earcut.
+ * Triangulate a 3D polygon, optionally with holes.
+ * For simple polygons (no holes): quads/triangles use a fan, 5+ use earcut.
+ * When holes are provided, all vertices are combined and earcut handles the rest.
  */
-export function triangulate(vertices: Vec3[], normal: Vec3): number[] {
+export function triangulate(
+  vertices: Vec3[],
+  normal: Vec3,
+  holes?: Vec3[][],
+): number[] {
   const n = vertices.length;
   if (n < 3) return [];
 
-  // Triangle — trivial
-  if (n === 3) return [0, 1, 2];
+  // Fast paths only when there are no holes
+  if (!holes || holes.length === 0) {
+    if (n === 3) return [0, 1, 2];
+    if (n === 4) return [0, 1, 2, 0, 2, 3];
+  }
 
-  // Quad — fan
-  if (n === 4) return [0, 1, 2, 0, 2, 3];
+  // Build combined vertex list: outer boundary + all hole vertices
+  const allVertices: Vec3[] = [...vertices];
+  const holeIndices: number[] = [];
 
-  // General polygon — project to 2D using the face normal, then earcut
-  const coords2d = projectTo2D(vertices, normal);
+  if (holes) {
+    for (const hole of holes) {
+      holeIndices.push(allVertices.length);
+      allVertices.push(...hole);
+    }
+  }
+
+  // Project to 2D and flatten for earcut
+  const coords2d = projectTo2D(allVertices, normal);
   const flat: number[] = [];
   for (const [u, v] of coords2d) {
     flat.push(u, v);
   }
 
-  const indices = earcut(flat);
+  const indices = earcut(flat, holeIndices.length > 0 ? holeIndices : undefined);
   return indices;
 }
 

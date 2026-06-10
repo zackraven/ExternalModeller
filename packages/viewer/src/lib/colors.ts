@@ -20,4 +20,14 @@ export function faceColor(tag: FaceTag): string {
   return COLOR_MAP[key] ?? FALLBACK;
 }
 
+const OPENING_COLOR_MAP: Record<string, string> = {
+  window: "#88CCEE",
+  door: "#8B6914",
+  rooflight: "#AADDFF",
+};
+
+export function openingColor(type: string): string {
+  return OPENING_COLOR_MAP[type] ?? FALLBACK;
+}
+
 export const SELECTED_EMISSIVE = 0xffff44;

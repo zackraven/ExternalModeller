@@ -66,6 +66,7 @@ export interface Face {
   area: number;
   tag: FaceTag;
   openings: FaceOpening[];
+  occludedArea?: number;  // area hidden behind another mass's surface
 }
 
 export interface FaceTag {

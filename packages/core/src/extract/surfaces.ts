@@ -19,7 +19,7 @@ export function extractSurfaces(
       storey: face.tag.storey,
       type: face.tag.type,
       adjacency: face.tag.adjacency,
-      area: face.area - openingArea,
+      area: face.area - openingArea - (face.occludedArea ?? 0),
       azimuth,
       tilt,
     });
