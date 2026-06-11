@@ -334,3 +334,105 @@ html, body, #root {
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
+
+/* ── Inactive mass (SVG) ──────────────────────── */
+
+.svg-polygon-inactive {
+  fill: rgba(100, 130, 180, 0.1);
+  stroke: #667;
+  pointer-events: none;
+}
+
+.svg-edge-inactive {
+  stroke: #667;
+  fill: none;
+  pointer-events: none;
+}
+
+.svg-vertex-inactive {
+  fill: #667;
+  stroke: #889;
+  pointer-events: none;
+}
+
+/* ── Mass list (sidebar) ─────────────────────── */
+
+.mass-list {
+  margin-bottom: 12px;
+}
+
+.mass-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px;
+  border-radius: 3px;
+  cursor: pointer;
+  margin-bottom: 2px;
+}
+
+.mass-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.mass-item.active {
+  background: rgba(233, 69, 96, 0.2);
+}
+
+.mass-name-input {
+  flex: 1;
+  min-width: 0;
+  padding: 2px 4px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+  color: #e0e0e0;
+  font-size: 12px;
+}
+
+.mass-name-input:focus {
+  border-color: #1a1a5e;
+  background: #0f3460;
+  outline: none;
+}
+
+.mass-delete-btn {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: #667;
+  font-size: 14px;
+  cursor: pointer;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.mass-delete-btn:hover {
+  color: #e94560;
+  background: rgba(233, 69, 96, 0.15);
+}
+
+.mass-add-btn {
+  width: 100%;
+  padding: 4px 8px;
+  margin-top: 4px;
+  border: 1px dashed #334;
+  border-radius: 3px;
+  background: transparent;
+  color: #8899aa;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.mass-add-btn:hover:not(:disabled) {
+  border-color: #e94560;
+  color: #e94560;
+}
+
+.mass-add-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

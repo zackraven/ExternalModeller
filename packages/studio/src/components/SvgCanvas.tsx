@@ -1,15 +1,15 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, type Dispatch } from "react";
 import type { Vec2 } from "@sap-geometry/core";
 import { clientToWorld } from "../lib/svgCoords";
-import { snapPoint, snapToGrid } from "../lib/snap";
+import { snapPoint, snapToGrid, pointInPolygon, snapToMasses } from "../lib/snap";
 import { GRID_STEP, SNAP_TOLERANCE, ORTHO_TOLERANCE_DEG, CLOSE_RADIUS } from "../lib/constants";
+import type { MassDesign } from "../lib/types";
+import type { StudioAction } from "../lib/reducer";
 
 interface SvgCanvasProps {
-  vertices: Vec2[];
-  onSetVertices: (v: Vec2[]) => void;
-  closed: boolean;
-  onClose: () => void;
-  onVertexMove?: (index: number, pos: Vec2) => void;
+  masses: MassDesign[];
+  activeMassId: string | null;
+  dispatch: Dispatch<StudioAction>;
 }
 
 interface ViewBox {
@@ -22,21 +22,40 @@ interface ViewBox {
 const INITIAL_VIEWBOX: ViewBox = { x: -5, y: -5, w: 30, h: 30 };
 const ZOOM_FACTOR = 1.1;
 
-export function SvgCanvas({ vertices, onSetVertices, closed, onClose, onVertexMove }: SvgCanvasProps) {
+function polygonArea(verts: Vec2[]): number {
+  let a = 0;
+  for (let i = 0; i < verts.length; i++) {
+    const j = (i + 1) % verts.length;
+    a += verts[i][0] * verts[j][1] - verts[j][0] * verts[i][1];
+  }
+  return Math.abs(a) / 2;
+}
+
+export function SvgCanvas({ masses, activeMassId, dispatch }: SvgCanvasProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [viewBox, setViewBox] = useState<ViewBox>(INITIAL_VIEWBOX);
   const [cursorPos, setCursorPos] = useState<Vec2 | null>(null);
   const [isPanning, setIsPanning] = useState(false);
   const panStart = useRef<{ x: number; y: number; vb: ViewBox } | null>(null);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dragMassId, setDragMassId] = useState<string | null>(null);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
 
-  const lastVertex = vertices.length > 0 ? vertices[vertices.length - 1] : null;
-  const firstVertex = vertices.length >= 3 ? vertices[0] : null;
+  const activeMass = masses.find((m) => m.id === activeMassId) ?? null;
+  const isDrawing = activeMass !== null && !activeMass.closed;
+
+  const lastVertex =
+    isDrawing && activeMass.vertices.length > 0
+      ? activeMass.vertices[activeMass.vertices.length - 1]
+      : null;
+  const firstVertex =
+    isDrawing && activeMass.vertices.length >= 3
+      ? activeMass.vertices[0]
+      : null;
 
   // Check if cursor is near first vertex (close target)
   const isNearClose =
-    !closed &&
+    isDrawing &&
     firstVertex &&
     cursorPos &&
     Math.hypot(cursorPos[0] - firstVertex[0], cursorPos[1] - firstVertex[1]) < CLOSE_RADIUS;
@@ -68,46 +87,87 @@ export function SvgCanvas({ vertices, onSetVertices, closed, onClose, onVertexMo
       const world = clientToWorld(e.clientX, e.clientY, svgRef.current);
 
       // Vertex dragging when closed
-      if (closed && dragIndex !== null && onVertexMove) {
+      if (dragIndex !== null && dragMassId !== null) {
         const snapped = snapToGrid(world, GRID_STEP);
-        onVertexMove(dragIndex, snapped);
+        dispatch({ type: "MOVE_VERTEX", massId: dragMassId, index: dragIndex, pos: snapped });
         return;
       }
 
-      // Vertex hover detection when closed
-      if (closed) {
+      // Vertex hover detection for active closed mass
+      if (activeMass && activeMass.closed) {
         let nearest = -1;
         let nearestDist = hitRadius;
-        for (let i = 0; i < vertices.length; i++) {
-          const d = Math.hypot(world[0] - vertices[i][0], world[1] - vertices[i][1]);
+        for (let i = 0; i < activeMass.vertices.length; i++) {
+          const d = Math.hypot(
+            world[0] - activeMass.vertices[i][0],
+            world[1] - activeMass.vertices[i][1],
+          );
           if (d < nearestDist) {
             nearestDist = d;
             nearest = i;
           }
         }
         setHoverIndex(nearest >= 0 ? nearest : null);
-        return;
+        if (nearest >= 0) return;
       }
 
-      const snapped = snapPoint(world, lastVertex, GRID_STEP, ORTHO_TOLERANCE_DEG);
-      setCursorPos(snapped);
+      // Drawing mode: snap cursor
+      if (isDrawing) {
+        let snapped = snapPoint(world, lastVertex, GRID_STEP, ORTHO_TOLERANCE_DEG);
+
+        // Try snapping to other masses' vertices/edges
+        const massSnap = snapToMasses(snapped, masses, activeMassId, SNAP_TOLERANCE);
+        if (massSnap) {
+          snapped = massSnap;
+        }
+
+        setCursorPos(snapped);
+      }
     },
-    [closed, lastVertex, isPanning, dragIndex, onVertexMove, vertices, hitRadius],
+    [
+      activeMass, activeMassId, isDrawing, lastVertex, isPanning,
+      dragIndex, dragMassId, masses, hitRadius, dispatch,
+    ],
   );
 
   const handleClick = useCallback(
     (e: React.MouseEvent<SVGSVGElement>) => {
-      if (e.button !== 0 || closed || isPanning) return;
-      if (!cursorPos) return;
+      if (e.button !== 0 || isPanning) return;
 
-      if (isNearClose && firstVertex) {
-        onClose();
+      // Drawing mode: add vertex or close
+      if (isDrawing && cursorPos) {
+        if (isNearClose && firstVertex) {
+          dispatch({ type: "CLOSE_MASS" });
+          return;
+        }
+        dispatch({ type: "ADD_VERTEX", vertex: cursorPos });
         return;
       }
 
-      onSetVertices([...vertices, cursorPos]);
+      // Closed mode: check if clicking on an inactive mass to select it
+      if (!svgRef.current) return;
+      const world = clientToWorld(e.clientX, e.clientY, svgRef.current);
+
+      // Find all closed masses containing the click, pick smallest area
+      let bestMass: MassDesign | null = null;
+      let bestArea = Infinity;
+      for (const mass of masses) {
+        if (!mass.closed || mass.vertices.length < 3) continue;
+        if (mass.id === activeMassId) continue;
+        if (pointInPolygon(world, mass.vertices)) {
+          const area = polygonArea(mass.vertices);
+          if (area < bestArea) {
+            bestArea = area;
+            bestMass = mass;
+          }
+        }
+      }
+
+      if (bestMass) {
+        dispatch({ type: "SET_ACTIVE_MASS", id: bestMass.id });
+      }
     },
-    [closed, cursorPos, vertices, onSetVertices, isNearClose, firstVertex, onClose, isPanning],
+    [isDrawing, cursorPos, isPanning, isNearClose, firstVertex, masses, activeMassId, dispatch],
   );
 
   const handleWheel = useCallback(
@@ -141,14 +201,15 @@ export function SvgCanvas({ vertices, onSetVertices, closed, onClose, onVertexMo
         return;
       }
 
-      // Left click on hovered vertex starts drag (when closed)
-      if (e.button === 0 && closed && hoverIndex !== null) {
+      // Left click on hovered vertex starts drag (when active mass is closed)
+      if (e.button === 0 && activeMass?.closed && hoverIndex !== null) {
         e.preventDefault();
         e.stopPropagation();
         setDragIndex(hoverIndex);
+        setDragMassId(activeMassId);
       }
     },
-    [viewBox, closed, hoverIndex],
+    [viewBox, activeMass, activeMassId, hoverIndex],
   );
 
   const handleMouseUp = useCallback(
@@ -159,6 +220,7 @@ export function SvgCanvas({ vertices, onSetVertices, closed, onClose, onVertexMo
       }
       if (e.button === 0 && dragIndex !== null) {
         setDragIndex(null);
+        setDragMassId(null);
       }
     },
     [dragIndex],
@@ -192,7 +254,7 @@ export function SvgCanvas({ vertices, onSetVertices, closed, onClose, onVertexMo
 
   // Cursor style
   let cursorStyle: string | undefined;
-  if (closed) {
+  if (activeMass?.closed) {
     if (dragIndex !== null) cursorStyle = "grabbing";
     else if (hoverIndex !== null) cursorStyle = "grab";
     else cursorStyle = "default";
@@ -225,97 +287,21 @@ export function SvgCanvas({ vertices, onSetVertices, closed, onClose, onVertexMo
           />
         ))}
 
-        {/* Closed polygon fill */}
-        {closed && vertices.length >= 3 && (
-          <polygon
-            className="svg-polygon"
-            points={vertices.map((v) => `${v[0]},${v[1]}`).join(" ")}
-            strokeWidth={strokeW}
-          />
-        )}
-
-        {/* Completed edges */}
-        {vertices.map((v, i) => {
-          if (i === 0) return null;
-          const prev = vertices[i - 1];
-          return (
-            <line
-              key={`edge-${i}`}
-              className="svg-edge"
-              x1={prev[0]}
-              y1={prev[1]}
-              x2={v[0]}
-              y2={v[1]}
-              strokeWidth={strokeW}
-            />
-          );
+        {/* Render all masses */}
+        {masses.map((mass) => {
+          const isActive = mass.id === activeMassId;
+          return renderMassPolygon(mass, isActive, {
+            strokeW,
+            vertexR,
+            hoverR,
+            worldPerPx,
+            hoverIndex: isActive ? hoverIndex : null,
+            dragIndex: isActive ? dragIndex : null,
+          });
         })}
 
-        {/* Closing edge when polygon is closed */}
-        {closed && vertices.length >= 3 && (
-          <line
-            className="svg-edge"
-            x1={vertices[vertices.length - 1][0]}
-            y1={vertices[vertices.length - 1][1]}
-            x2={vertices[0][0]}
-            y2={vertices[0][1]}
-            strokeWidth={strokeW}
-          />
-        )}
-
-        {/* Edge length labels */}
-        {vertices.map((v, i) => {
-          if (i === 0) return null;
-          const prev = vertices[i - 1];
-          const len = Math.hypot(v[0] - prev[0], v[1] - prev[1]);
-          const mx = (prev[0] + v[0]) / 2;
-          const my = (prev[1] + v[1]) / 2;
-          const dx = v[0] - prev[0];
-          const dy = v[1] - prev[1];
-          const nl = Math.hypot(dx, dy) || 1;
-          const ox = -dy / nl * vertexR * 3;
-          const oy = dx / nl * vertexR * 3;
-          return (
-            <text
-              key={`label-${i}`}
-              className="svg-edge-label"
-              x={mx + ox}
-              y={my + oy}
-              transform={`scale(1,-1) translate(0,${-2 * (my + oy)})`}
-              style={{ fontSize: `${Math.max(0.3, worldPerPx * 10)}px` }}
-            >
-              {len.toFixed(1)}m
-            </text>
-          );
-        })}
-
-        {/* Closing edge label */}
-        {closed && vertices.length >= 3 && (() => {
-          const a = vertices[vertices.length - 1];
-          const b = vertices[0];
-          const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
-          const mx = (a[0] + b[0]) / 2;
-          const my = (a[1] + b[1]) / 2;
-          const dx = b[0] - a[0];
-          const dy = b[1] - a[1];
-          const nl = Math.hypot(dx, dy) || 1;
-          const ox = -dy / nl * vertexR * 3;
-          const oy = dx / nl * vertexR * 3;
-          return (
-            <text
-              className="svg-edge-label"
-              x={mx + ox}
-              y={my + oy}
-              transform={`scale(1,-1) translate(0,${-2 * (my + oy)})`}
-              style={{ fontSize: `${Math.max(0.3, worldPerPx * 10)}px` }}
-            >
-              {len.toFixed(1)}m
-            </text>
-          );
-        })()}
-
-        {/* Rubber-band line */}
-        {!closed && lastVertex && cursorPos && (
+        {/* Drawing preview for active drawing mass */}
+        {isDrawing && lastVertex && cursorPos && (
           <line
             className="svg-edge-preview"
             x1={lastVertex[0]}
@@ -337,31 +323,8 @@ export function SvgCanvas({ vertices, onSetVertices, closed, onClose, onVertexMo
           />
         )}
 
-        {/* Vertex dots */}
-        {vertices.map((v, i) => {
-          const isDragging = dragIndex === i;
-          const isHovered = hoverIndex === i && !isDragging;
-          const className = isDragging
-            ? "svg-vertex-dragging"
-            : isHovered
-              ? "svg-vertex-hover"
-              : "svg-vertex";
-          const r = (isDragging || isHovered) ? hoverR : vertexR;
-          return (
-            <circle
-              key={`vertex-${i}`}
-              className={className}
-              cx={v[0]}
-              cy={v[1]}
-              r={r}
-              strokeWidth={strokeW * 0.5}
-              pointerEvents={closed ? "auto" : "none"}
-            />
-          );
-        })}
-
         {/* Ghost cursor dot */}
-        {!closed && cursorPos && !isNearClose && (
+        {isDrawing && cursorPos && !isNearClose && (
           <circle
             className="svg-vertex-ghost"
             cx={cursorPos[0]}
@@ -371,5 +334,164 @@ export function SvgCanvas({ vertices, onSetVertices, closed, onClose, onVertexMo
         )}
       </g>
     </svg>
+  );
+}
+
+// ── Helper: render a single mass polygon ────────
+
+interface MassRenderOpts {
+  strokeW: number;
+  vertexR: number;
+  hoverR: number;
+  worldPerPx: number;
+  hoverIndex: number | null;
+  dragIndex: number | null;
+}
+
+function renderMassPolygon(
+  mass: MassDesign,
+  isActive: boolean,
+  opts: MassRenderOpts,
+) {
+  const { vertices, closed } = mass;
+  const { strokeW, vertexR, hoverR, worldPerPx, hoverIndex, dragIndex } = opts;
+
+  if (vertices.length === 0) return null;
+
+  const polygonClass = isActive ? "svg-polygon" : "svg-polygon-inactive";
+  const edgeClass = isActive ? "svg-edge" : "svg-edge-inactive";
+
+  return (
+    <g key={mass.id}>
+      {/* Filled polygon */}
+      {closed && vertices.length >= 3 && (
+        <polygon
+          className={polygonClass}
+          points={vertices.map((v) => `${v[0]},${v[1]}`).join(" ")}
+          strokeWidth={strokeW}
+        />
+      )}
+
+      {/* Edges */}
+      {vertices.map((v, i) => {
+        if (i === 0) return null;
+        const prev = vertices[i - 1];
+        return (
+          <line
+            key={`${mass.id}-edge-${i}`}
+            className={edgeClass}
+            x1={prev[0]}
+            y1={prev[1]}
+            x2={v[0]}
+            y2={v[1]}
+            strokeWidth={strokeW}
+          />
+        );
+      })}
+
+      {/* Closing edge */}
+      {closed && vertices.length >= 3 && (
+        <line
+          className={edgeClass}
+          x1={vertices[vertices.length - 1][0]}
+          y1={vertices[vertices.length - 1][1]}
+          x2={vertices[0][0]}
+          y2={vertices[0][1]}
+          strokeWidth={strokeW}
+        />
+      )}
+
+      {/* Edge length labels (active mass only) */}
+      {isActive &&
+        vertices.map((v, i) => {
+          if (i === 0) return null;
+          const prev = vertices[i - 1];
+          const len = Math.hypot(v[0] - prev[0], v[1] - prev[1]);
+          const mx = (prev[0] + v[0]) / 2;
+          const my = (prev[1] + v[1]) / 2;
+          const dx = v[0] - prev[0];
+          const dy = v[1] - prev[1];
+          const nl = Math.hypot(dx, dy) || 1;
+          const ox = (-dy / nl) * vertexR * 3;
+          const oy = (dx / nl) * vertexR * 3;
+          return (
+            <text
+              key={`${mass.id}-label-${i}`}
+              className="svg-edge-label"
+              x={mx + ox}
+              y={my + oy}
+              transform={`scale(1,-1) translate(0,${-2 * (my + oy)})`}
+              style={{ fontSize: `${Math.max(0.3, worldPerPx * 10)}px` }}
+            >
+              {len.toFixed(1)}m
+            </text>
+          );
+        })}
+
+      {/* Closing edge label (active mass only) */}
+      {isActive &&
+        closed &&
+        vertices.length >= 3 &&
+        (() => {
+          const a = vertices[vertices.length - 1];
+          const b = vertices[0];
+          const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+          const mx = (a[0] + b[0]) / 2;
+          const my = (a[1] + b[1]) / 2;
+          const dx = b[0] - a[0];
+          const dy = b[1] - a[1];
+          const nl = Math.hypot(dx, dy) || 1;
+          const ox = (-dy / nl) * vertexR * 3;
+          const oy = (dx / nl) * vertexR * 3;
+          return (
+            <text
+              className="svg-edge-label"
+              x={mx + ox}
+              y={my + oy}
+              transform={`scale(1,-1) translate(0,${-2 * (my + oy)})`}
+              style={{ fontSize: `${Math.max(0.3, worldPerPx * 10)}px` }}
+            >
+              {len.toFixed(1)}m
+            </text>
+          );
+        })()}
+
+      {/* Vertex dots */}
+      {vertices.map((v, i) => {
+        if (isActive) {
+          const isDragging = dragIndex === i;
+          const isHovered = hoverIndex === i && !isDragging;
+          const className = isDragging
+            ? "svg-vertex-dragging"
+            : isHovered
+              ? "svg-vertex-hover"
+              : "svg-vertex";
+          const r = isDragging || isHovered ? hoverR : vertexR;
+          return (
+            <circle
+              key={`${mass.id}-v-${i}`}
+              className={className}
+              cx={v[0]}
+              cy={v[1]}
+              r={r}
+              strokeWidth={strokeW * 0.5}
+              pointerEvents={closed ? "auto" : "none"}
+            />
+          );
+        }
+        // Inactive mass: small non-interactive dots
+        return (
+          <circle
+            key={`${mass.id}-v-${i}`}
+            className="svg-vertex-inactive"
+            cx={v[0]}
+            cy={v[1]}
+            r={vertexR * 0.7}
+            strokeWidth={strokeW * 0.5}
+            pointerEvents="none"
+          />
+        );
+      })}
+    </g>
   );
 }

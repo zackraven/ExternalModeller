@@ -1,16 +1,17 @@
-import type { Vec2, Schedule, FaceModel, Face, FaceOpening } from "@sap-geometry/core";
+import type { Dispatch } from "react";
+import type { Schedule, FaceModel, Face, FaceOpening } from "@sap-geometry/core";
 import { azimuthOf, tiltOf } from "@sap-geometry/core";
 import { PropertyControls } from "./PropertyControls";
-import type { DesignState } from "../lib/types";
+import type { MassDesign, DesignState } from "../lib/types";
+import type { StudioAction } from "../lib/reducer";
 
 interface ScheduleSidebarProps {
   schedule: Schedule | null;
-  vertices: Vec2[];
-  closed: boolean;
   model: FaceModel | null;
+  masses: MassDesign[];
+  activeMassId: string | null;
   selectedFaceId: string | null;
-  design: DesignState;
-  onDesignChange: (d: DesignState) => void;
+  dispatch: Dispatch<StudioAction>;
 }
 
 const COMPASS: [number, string][] = [
@@ -111,35 +112,18 @@ function OpeningDetailTable({
 
 export function ScheduleSidebar({
   schedule,
-  vertices,
-  closed,
   model,
+  masses,
+  activeMassId,
   selectedFaceId,
-  design,
-  onDesignChange,
+  dispatch,
 }: ScheduleSidebarProps) {
-  // Mode 1: No polygon — drawing instructions
-  if (!closed || !schedule) {
-    return (
-      <div className="schedule-sidebar">
-        <h3>Drawing</h3>
-        <div className="drawing-info">
-          <p>Vertices: {vertices.length}</p>
-          {!closed && (
-            <p style={{ marginTop: 8 }}>
-              {vertices.length === 0
-                ? "Click to place first vertex"
-                : vertices.length < 3
-                  ? "Click to add more vertices"
-                  : "Click first vertex to close polygon"}
-            </p>
-          )}
-        </div>
-      </div>
-    );
-  }
+  const activeMass = masses.find((m) => m.id === activeMassId) ?? null;
+  const closedMasses = masses.filter((m) => m.closed);
+  const hasAnyClosedMass = closedMasses.length > 0;
+  const isDrawing = activeMass !== null && !activeMass.closed;
 
-  // Mode 2: Face or opening selected
+  // Mode 1: Face or opening selected
   if (selectedFaceId && model) {
     const face = model.faces.find((f) => f.id === selectedFaceId);
     if (face) {
@@ -164,64 +148,156 @@ export function ScheduleSidebar({
     }
   }
 
-  // Mode 3: Default — property controls + schedule totals
-  const { totals } = schedule;
+  // Bridge activeMass to DesignState for PropertyControls
+  const design: DesignState | null = activeMass?.closed
+    ? {
+        storeys: activeMass.storeys,
+        roof: activeMass.roof,
+        openings: activeMass.openings,
+        components: activeMass.components,
+      }
+    : null;
+
+  const handleDesignChange = (d: DesignState) => {
+    if (!activeMassId) return;
+    dispatch({
+      type: "UPDATE_MASS",
+      id: activeMassId,
+      patch: {
+        storeys: d.storeys,
+        roof: d.roof,
+        openings: d.openings,
+        components: d.components,
+      },
+    });
+  };
 
   return (
     <div className="schedule-sidebar">
-      <PropertyControls
-        design={design}
-        onDesignChange={onDesignChange}
-        edgeCount={vertices.length}
-      />
+      {/* Mass list */}
+      {masses.length > 0 && (
+        <>
+          <h3>Masses</h3>
+          <div className="mass-list">
+            {masses.filter((m) => m.closed).map((mass) => (
+              <div
+                key={mass.id}
+                className={`mass-item ${mass.id === activeMassId ? "active" : ""}`}
+                onClick={() => dispatch({ type: "SET_ACTIVE_MASS", id: mass.id })}
+              >
+                <input
+                  className="mass-name-input"
+                  value={mass.name}
+                  onChange={(e) =>
+                    dispatch({ type: "RENAME_MASS", id: mass.id, name: e.target.value })
+                  }
+                  onClick={(e) => e.stopPropagation()}
+                />
+                <button
+                  className="mass-delete-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    dispatch({ type: "REMOVE_MASS", id: mass.id });
+                  }}
+                  title="Delete mass"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+            <button
+              className="mass-add-btn"
+              onClick={() => dispatch({ type: "ADD_MASS" })}
+              disabled={isDrawing}
+            >
+              + Add Mass
+            </button>
+          </div>
+        </>
+      )}
 
-      <h3 style={{ marginTop: 16 }}>Schedule</h3>
-      <table>
-        <tbody>
-          <tr>
-            <td>Ext. wall (net)</td>
-            <td>{totals.externalWallNet.toFixed(1)} m²</td>
-          </tr>
-          <tr>
-            <td>Floor</td>
-            <td>{totals.floor.toFixed(1)} m²</td>
-          </tr>
-          <tr>
-            <td>Roof</td>
-            <td>{totals.roof.toFixed(1)} m²</td>
-          </tr>
-          <tr>
-            <td>Windows</td>
-            <td>{totals.window.toFixed(1)} m²</td>
-          </tr>
-          <tr>
-            <td>Doors</td>
-            <td>{totals.door.toFixed(1)} m²</td>
-          </tr>
-          <tr>
-            <td>Party wall</td>
-            <td>{totals.party.toFixed(1)} m²</td>
-          </tr>
-        </tbody>
-      </table>
+      {/* Drawing instructions */}
+      {(isDrawing || !hasAnyClosedMass) && (
+        <>
+          <h3>Drawing</h3>
+          <div className="drawing-info">
+            {activeMass && (
+              <p>Vertices: {activeMass.vertices.length}</p>
+            )}
+            <p style={{ marginTop: 8 }}>
+              {!activeMass || activeMass.vertices.length === 0
+                ? masses.length === 0
+                  ? "Click to place first vertex"
+                  : "Click to start drawing new mass"
+                : activeMass.vertices.length < 3
+                  ? "Click to add more vertices"
+                  : "Click first vertex to close polygon"}
+            </p>
+          </div>
+        </>
+      )}
 
-      <h3 style={{ marginTop: 16 }}>Surfaces</h3>
-      <table>
-        <tbody>
-          <tr>
-            <td>Total surfaces</td>
-            <td>{schedule.surfaces.length}</td>
-          </tr>
-          <tr>
-            <td>Total openings</td>
-            <td>{schedule.openings.length}</td>
-          </tr>
-          <tr>
-            <td>Total junctions</td>
-            <td>{schedule.junctions.length}</td>
-          </tr>
-        </tbody>
-      </table>
+      {/* Property controls for active closed mass */}
+      {design && activeMass && (
+        <PropertyControls
+          design={design}
+          onDesignChange={handleDesignChange}
+          edgeCount={activeMass.vertices.length}
+        />
+      )}
+
+      {/* Schedule totals */}
+      {schedule && (
+        <>
+          <h3 style={{ marginTop: 16 }}>Schedule</h3>
+          <table>
+            <tbody>
+              <tr>
+                <td>Ext. wall (net)</td>
+                <td>{schedule.totals.externalWallNet.toFixed(1)} m²</td>
+              </tr>
+              <tr>
+                <td>Floor</td>
+                <td>{schedule.totals.floor.toFixed(1)} m²</td>
+              </tr>
+              <tr>
+                <td>Roof</td>
+                <td>{schedule.totals.roof.toFixed(1)} m²</td>
+              </tr>
+              <tr>
+                <td>Windows</td>
+                <td>{schedule.totals.window.toFixed(1)} m²</td>
+              </tr>
+              <tr>
+                <td>Doors</td>
+                <td>{schedule.totals.door.toFixed(1)} m²</td>
+              </tr>
+              <tr>
+                <td>Party wall</td>
+                <td>{schedule.totals.party.toFixed(1)} m²</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h3 style={{ marginTop: 16 }}>Surfaces</h3>
+          <table>
+            <tbody>
+              <tr>
+                <td>Total surfaces</td>
+                <td>{schedule.surfaces.length}</td>
+              </tr>
+              <tr>
+                <td>Total openings</td>
+                <td>{schedule.openings.length}</td>
+              </tr>
+              <tr>
+                <td>Total junctions</td>
+                <td>{schedule.junctions.length}</td>
+              </tr>
+            </tbody>
+          </table>
+        </>
+      )}
     </div>
   );
 }

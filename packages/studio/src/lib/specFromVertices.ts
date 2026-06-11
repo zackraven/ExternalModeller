@@ -1,5 +1,5 @@
 import type { Vec2, BuildingSpec } from "@sap-geometry/core";
-import type { DesignState } from "./types";
+import type { DesignState, MassDesign } from "./types";
 import { DEFAULT_STOREY_HEIGHT } from "./constants";
 
 /** Build a minimal BuildingSpec from a closed polygon of vertices. */
@@ -31,4 +31,37 @@ export function buildSpec(vertices: Vec2[], design: DesignState): BuildingSpec {
   if (design.components?.length) mass.components = design.components;
 
   return { masses: [mass] };
+}
+
+/** Build a BuildingSpec from multiple MassDesign objects. */
+export function buildSpecFromMasses(masses: MassDesign[]): BuildingSpec {
+  const specMasses = masses
+    .filter((m) => m.closed && m.vertices.length >= 3)
+    .map((m) => {
+      const roofType = m.roof.type;
+      const roof: BuildingSpec["masses"][0]["roof"] = { type: roofType };
+
+      if (roofType !== "flat") {
+        roof.pitch = m.roof.pitch;
+      }
+      if (roofType === "mono" || roofType === "dual") {
+        roof.ridgeEdge = Math.min(
+          m.roof.ridgeEdge,
+          Math.max(0, m.vertices.length - 1),
+        );
+      }
+
+      const mass: BuildingSpec["masses"][0] = {
+        id: m.id,
+        footprint: m.vertices,
+        storeys: m.storeys,
+        roof,
+      };
+      if (m.openings?.length) mass.openings = m.openings;
+      if (m.components?.length) mass.components = m.components;
+
+      return mass;
+    });
+
+  return { masses: specMasses };
 }

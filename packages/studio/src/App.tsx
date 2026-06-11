@@ -1,122 +1,73 @@
-import { useState, useCallback, useMemo, useEffect } from "react";
-import type { Vec2, BuildingSpec } from "@sap-geometry/core";
+import { useReducer, useMemo, useEffect, useCallback } from "react";
+import type { BuildingSpec } from "@sap-geometry/core";
 import { SvgCanvas } from "./components/SvgCanvas";
 import { PreviewPanel } from "./components/PreviewPanel";
 import { EditorToolbar } from "./components/EditorToolbar";
 import { ScheduleSidebar } from "./components/ScheduleSidebar";
 import { useModel } from "./hooks/useModel";
-import { buildSpec } from "./lib/specFromVertices";
-import { verticesFromSpec } from "./lib/verticesFromSpec";
-import { defaultDesign } from "./lib/types";
-import type { DesignState } from "./lib/types";
+import { buildSpecFromMasses } from "./lib/specFromVertices";
+import { defaultStudioState } from "./lib/types";
+import { studioReducer } from "./lib/reducer";
+import type { StudioAction } from "./lib/reducer";
 
 export function App() {
-  const [vertices, setVertices] = useState<Vec2[]>([]);
-  const [closed, setClosed] = useState(false);
-  const [selectedFaceId, setSelectedFaceId] = useState<string | null>(null);
-  const [showOverlay, setShowOverlay] = useState(false);
-  const [design, setDesign] = useState<DesignState>(defaultDesign);
+  const [state, dispatch] = useReducer(studioReducer, undefined, defaultStudioState);
+
+  const activeMass = state.masses.find((m) => m.id === state.activeMassId) ?? null;
+  const hasDrawingMass = state.masses.some((m) => !m.closed);
+  const hasClosedMass = state.masses.some((m) => m.closed);
 
   const spec = useMemo<BuildingSpec | null>(() => {
-    if (closed && vertices.length >= 3) {
-      return buildSpec(vertices, design);
-    }
-    return null;
-  }, [closed, vertices, design]);
+    const closedMasses = state.masses.filter(
+      (m) => m.closed && m.vertices.length >= 3,
+    );
+    if (closedMasses.length === 0) return null;
+    return buildSpecFromMasses(state.masses);
+  }, [state.masses]);
 
   const { model, schedule, error } = useModel(spec);
 
   // Clear selection when spec changes (face IDs change on rebuild)
   useEffect(() => {
-    setSelectedFaceId(null);
+    dispatch({ type: "SET_SELECTED_FACE", id: null });
   }, [spec]);
 
-  const handleClose = useCallback(() => {
-    setClosed(true);
-  }, []);
-
-  const handleClear = useCallback(() => {
-    setVertices([]);
-    setClosed(false);
-    setDesign(defaultDesign());
-    setSelectedFaceId(null);
-    setShowOverlay(false);
-  }, []);
-
-  const handleUndo = useCallback(() => {
-    setVertices((v) => v.slice(0, -1));
-  }, []);
-
-  const handleLoadFixture = useCallback((fixtureSpec: BuildingSpec) => {
-    const verts = verticesFromSpec(fixtureSpec);
-    setVertices(verts);
-    setClosed(true);
-
-    // Extract design from fixture's first mass
-    const mass = fixtureSpec.masses[0];
-    if (mass) {
-      const roof = mass.roof;
-      const roofType = roof?.type ?? "flat";
-      const mappedType: DesignState["roof"]["type"] =
-        roofType === "none" ? "flat" : roofType;
-      setDesign({
-        storeys: mass.storeys,
-        roof: {
-          type: mappedType,
-          pitch: (roof && "pitch" in roof && roof.pitch) || 35,
-          ridgeEdge: (roof && "ridgeEdge" in roof && roof.ridgeEdge) || 0,
-        },
-        openings: mass.openings,
-        components: mass.components,
-      });
-    }
-  }, []);
-
-  const handleVertexMove = useCallback((index: number, pos: Vec2) => {
-    setVertices((prev) => prev.map((v, i) => (i === index ? pos : v)));
-  }, []);
-
-  const handleToggleOverlay = useCallback(() => {
-    setShowOverlay((v) => !v);
+  const handleSelectFace = useCallback((id: string | null) => {
+    dispatch({ type: "SET_SELECTED_FACE", id });
   }, []);
 
   return (
     <div className="studio-app">
       <div className="editor-pane">
         <EditorToolbar
-          closed={closed}
-          onClear={handleClear}
-          onUndo={handleUndo}
-          canUndo={vertices.length > 0}
-          onLoadFixture={handleLoadFixture}
-          showOverlay={showOverlay}
-          onToggleOverlay={handleToggleOverlay}
+          hasDrawingMass={hasDrawingMass}
+          hasClosedMass={hasClosedMass}
+          canUndo={hasDrawingMass && !!activeMass && activeMass.vertices.length > 0}
+          showOverlay={state.showOverlay}
+          dispatch={dispatch}
         />
         <SvgCanvas
-          vertices={vertices}
-          onSetVertices={setVertices}
-          closed={closed}
-          onClose={handleClose}
-          onVertexMove={handleVertexMove}
+          masses={state.masses}
+          activeMassId={state.activeMassId}
+          dispatch={dispatch}
         />
       </div>
       <div className="preview-pane">
         <PreviewPanel
           model={model}
           error={error}
-          selectedFaceId={selectedFaceId}
-          onSelectFace={setSelectedFaceId}
-          showOverlay={showOverlay}
+          selectedFaceId={state.selectedFaceId}
+          onSelectFace={handleSelectFace}
+          showOverlay={state.showOverlay}
         />
       </div>
       <ScheduleSidebar
         schedule={schedule}
-        vertices={vertices}
-        closed={closed}
         model={model}
-        selectedFaceId={selectedFaceId}
-        design={design}
-        onDesignChange={setDesign}
+        masses={state.masses}
+        activeMassId={state.activeMassId}
+        selectedFaceId={state.selectedFaceId}
+        dispatch={dispatch}
       />
     </div>
   );

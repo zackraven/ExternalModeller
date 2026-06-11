@@ -1,29 +1,29 @@
-import type { BuildingSpec } from "@sap-geometry/core";
+import type { Dispatch } from "react";
 import { FIXTURES } from "../lib/fixtures";
+import type { StudioAction } from "../lib/reducer";
 
 interface EditorToolbarProps {
-  closed: boolean;
-  onClear: () => void;
-  onUndo: () => void;
+  hasDrawingMass: boolean;
+  hasClosedMass: boolean;
   canUndo: boolean;
-  onLoadFixture: (spec: BuildingSpec) => void;
   showOverlay: boolean;
-  onToggleOverlay: () => void;
+  dispatch: Dispatch<StudioAction>;
 }
 
 export function EditorToolbar({
-  closed,
-  onClear,
-  onUndo,
+  hasDrawingMass,
+  hasClosedMass,
   canUndo,
-  onLoadFixture,
   showOverlay,
-  onToggleOverlay,
+  dispatch,
 }: EditorToolbarProps) {
   return (
     <div className="editor-toolbar">
-      <button onClick={onClear}>Clear</button>
-      <button onClick={onUndo} disabled={closed || !canUndo}>
+      <button onClick={() => dispatch({ type: "CLEAR_ALL" })}>Clear</button>
+      <button
+        onClick={() => dispatch({ type: "UNDO_VERTEX" })}
+        disabled={!canUndo}
+      >
         Undo
       </button>
       <select
@@ -31,7 +31,7 @@ export function EditorToolbar({
         onChange={(e) => {
           const idx = parseInt(e.target.value, 10);
           if (!isNaN(idx) && FIXTURES[idx]) {
-            onLoadFixture(FIXTURES[idx].spec);
+            dispatch({ type: "LOAD_FIXTURE", spec: FIXTURES[idx].spec });
           }
         }}
       >
@@ -46,8 +46,8 @@ export function EditorToolbar({
       </select>
       <button
         className={showOverlay ? "active" : ""}
-        disabled={!closed}
-        onClick={onToggleOverlay}
+        disabled={!hasClosedMass}
+        onClick={() => dispatch({ type: "TOGGLE_OVERLAY" })}
       >
         Labels
       </button>
