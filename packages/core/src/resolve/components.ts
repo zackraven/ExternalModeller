@@ -1,5 +1,5 @@
 import type { Mass, Face, Vec3, Component } from "../types.js";
-import { newell, snapVec3, dot, sub, normalize } from "../geometry.js";
+import { newell, snapVec3, dot, sub, normalize, cross, length } from "../geometry.js";
 import polygonClipping from "polygon-clipping";
 
 /**
@@ -35,14 +35,31 @@ export function placeComponents(
 // ── Roof-plane local coordinate system ──────────────────────
 
 function roofPlaneCoords(face: Face) {
+  const n = face.normal;
+
+  // Horizontal direction in the roof plane (perpendicular to slope direction)
+  const raw = cross([0, 0, 1] as Vec3, n);
+  let uAxis: Vec3;
+  if (length(raw) < 1e-6) {
+    // Near-flat face — fall back to vertex-based direction
+    uAxis = normalize(sub(face.vertices[1], face.vertices[0]));
+  } else {
+    uAxis = normalize(raw);
+  }
+
+  // Up-slope direction (perpendicular to both normal and eaves direction)
+  const vAxis = normalize(cross(n, uAxis));
+
+  // Origin = centroid of eaves vertices (those at minimum z)
   const v = face.vertices;
-  const uAxis = normalize(sub(v[1], v[0]));  // along eaves edge
-  const vAxis = normalize(sub(v[2], v[1]));  // up-slope direction
+  const minZ = Math.min(...v.map(p => p[2]));
+  const eavesVerts = v.filter(p => Math.abs(p[2] - minZ) < 1e-4);
   const origin: Vec3 = [
-    (v[0][0] + v[1][0]) / 2,
-    (v[0][1] + v[1][1]) / 2,
-    (v[0][2] + v[1][2]) / 2,
+    eavesVerts.reduce((s, p) => s + p[0], 0) / eavesVerts.length,
+    eavesVerts.reduce((s, p) => s + p[1], 0) / eavesVerts.length,
+    eavesVerts.reduce((s, p) => s + p[2], 0) / eavesVerts.length,
   ];
+
   return { uAxis, vAxis, origin };
 }
 
