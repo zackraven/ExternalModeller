@@ -107,3 +107,7 @@ React + Three.js viewer. `npm run dev` → Vite on localhost:5173.
 - **Phase 6**: multi-mass abutment detection, party wall junctions, cross-mass face occlusion
 - **Phase 7**: validation suite (hand-checked expected values for all fixtures), SPEC.md, JSON schema
 - **Phase 8**: CLI (`surface-modeller` bin) and CSV export
+
+### Studio Phase 0 — Dormer placement decoupled from rectangular faces
+
+`roofPlaneCoords()` in `components.ts` now derives an orthonormal coordinate frame from the face normal (`cross([0,0,1], n)` for eaves direction, `cross(n, uAxis)` for up-slope) instead of relying on vertex ordering (`v[0]→v[1]`, `v[1]→v[2]`). Origin is the centroid of eaves vertices (min-z). This produces identical results for rectangular faces but enables correct dormer/rooflight placement on non-rectangular roof faces (trapezoids, triangles). Flat-face fallback uses vertex-based direction. All 235 tests pass unchanged.
