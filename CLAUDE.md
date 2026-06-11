@@ -123,3 +123,17 @@ React + Three.js viewer. `npm run dev` → Vite on localhost:5173.
 ### Studio Phase 0 — Dormer placement decoupled from rectangular faces
 
 `roofPlaneCoords()` in `components.ts` now derives an orthonormal coordinate frame from the face normal (`cross([0,0,1], n)` for eaves direction, `cross(n, uAxis)` for up-slope) instead of relying on vertex ordering (`v[0]→v[1]`, `v[1]→v[2]`). Origin is the centroid of eaves vertices (min-z). This produces identical results for rectangular faces but enables correct dormer/rooflight placement on non-rectangular roof faces (trapezoids, triangles). Flat-face fallback uses vertex-based direction. All 235 tests pass unchanged.
+
+### Studio Phase 3 — Spec import/export
+
+`EditorToolbar.tsx` has Import button (file picker, `.json`) and Export button (downloads `model.spec.json`). `App.tsx` has global paste handler (`ClipboardEvent`) and drag-and-drop on the editor pane. Both validate JSON and dispatch `LOAD_FIXTURE`.
+
+### Studio Phase 4 — Ridge graph roof editor
+
+**Ridge graph** (`ridgeGraph.ts`): `RidgeNode` (id, pos: Vec2, z), `RidgeSegment` (from, to), `RidgeGraph` (nodes, segments). `ridgeGraphFromParametric()` reverse-engineers a ridge graph from `suggestRoof()` output. `facesFromRidgeGraph()` derives `CustomRoofFace[]` using edge-based classification (SLOPE/HIP/GABLE by midpoint projection onto ridge). Non-planar faces are fan-triangulated. `roofPlanLines()` computes hip/valley projection lines for the SVG overlay.
+
+**State**: `MassDesign.ridgeGraph?: RidgeGraph`. When present, `buildSpecFromMasses()` emits `type: "custom"` with faces from `facesFromRidgeGraph()`. Reducer actions: `SET_ROOF_MODE`, `UPDATE_RIDGE_NODE`, `ADD_RIDGE_NODE`, `REMOVE_RIDGE_NODE`, `ADD_RIDGE_SEGMENT`, `REMOVE_RIDGE_SEGMENT`.
+
+**UI**: `PropertyControls` has parametric/custom mode toggle, ridge node z-height inputs. `SvgCanvas` renders ridge segments (gold lines), draggable ridge nodes (gold circles with z-labels), and hip/valley projection lines (gray dashed). `ScheduleSidebar` shows per-face pitch/area/azimuth readouts in custom mode.
+
+**Known issues**: SVG overlay still has visual glitches — the hip/valley lines and ridge node interaction need further polish. Ridge node dragging can produce geometries that cause validation warnings.
