@@ -1,4 +1,5 @@
 import type { Vec2, Opening, Component } from "@sap-geometry/core";
+import type { RidgeGraph } from "./ridgeGraph";
 import { DEFAULT_STOREY_HEIGHT } from "./constants";
 
 export interface RoofConfig {
@@ -32,6 +33,7 @@ export interface MassDesign {
   roof: RoofConfig;
   openings?: Opening[];
   components?: Component[];
+  ridgeGraph?: RidgeGraph;
 }
 
 export interface StudioState {

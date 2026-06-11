@@ -1,5 +1,7 @@
 import type { Vec2, BuildingSpec, Mass, Opening } from "@sap-geometry/core";
 import type { MassDesign, StudioState, RoofConfig } from "./types";
+import type { RidgeGraph } from "./ridgeGraph";
+import { ridgeGraphFromParametric, generateNodeId } from "./ridgeGraph";
 import { defaultMass, defaultStudioState, generateMassId } from "./types";
 import { DEFAULT_STOREY_HEIGHT } from "./constants";
 
@@ -21,7 +23,13 @@ export type StudioAction =
   | { type: "LOAD_FIXTURE"; spec: BuildingSpec }
   | { type: "CLEAR_ALL" }
   | { type: "SET_SELECTED_FACE"; id: string | null }
-  | { type: "TOGGLE_OVERLAY" };
+  | { type: "TOGGLE_OVERLAY" }
+  | { type: "SET_ROOF_MODE"; massId: string; mode: "parametric" | "custom" }
+  | { type: "UPDATE_RIDGE_NODE"; massId: string; nodeId: string; pos?: Vec2; z?: number }
+  | { type: "ADD_RIDGE_NODE"; massId: string; pos: Vec2; z: number; connectTo?: string }
+  | { type: "REMOVE_RIDGE_NODE"; massId: string; nodeId: string }
+  | { type: "ADD_RIDGE_SEGMENT"; massId: string; from: string; to: string }
+  | { type: "REMOVE_RIDGE_SEGMENT"; massId: string; from: string; to: string };
 
 // ── Helpers ─────────────────────────────────────
 
@@ -280,6 +288,129 @@ export function studioReducer(
 
     case "TOGGLE_OVERLAY": {
       return { ...state, showOverlay: !state.showOverlay };
+    }
+
+    case "SET_ROOF_MODE": {
+      return {
+        ...state,
+        masses: state.masses.map((m) => {
+          if (m.id !== action.massId) return m;
+          if (action.mode === "custom") {
+            // Initialize ridge graph from current parametric roof
+            const wallTopZ = m.storeys.reduce((s, st) => s + st.height, 0);
+            const rg = ridgeGraphFromParametric(
+              m.vertices, m.roof.type, m.roof.pitch, m.roof.ridgeEdge, wallTopZ,
+            );
+            return { ...m, ridgeGraph: rg };
+          }
+          // Switch back to parametric: clear ridge graph
+          return { ...m, ridgeGraph: undefined };
+        }),
+      };
+    }
+
+    case "UPDATE_RIDGE_NODE": {
+      return {
+        ...state,
+        masses: state.masses.map((m) => {
+          if (m.id !== action.massId || !m.ridgeGraph) return m;
+          return {
+            ...m,
+            ridgeGraph: {
+              ...m.ridgeGraph,
+              nodes: m.ridgeGraph.nodes.map((n) =>
+                n.id === action.nodeId
+                  ? { ...n, ...(action.pos !== undefined ? { pos: action.pos } : {}), ...(action.z !== undefined ? { z: action.z } : {}) }
+                  : n,
+              ),
+            },
+          };
+        }),
+      };
+    }
+
+    case "ADD_RIDGE_NODE": {
+      return {
+        ...state,
+        masses: state.masses.map((m) => {
+          if (m.id !== action.massId || !m.ridgeGraph) return m;
+          const nodeId = generateNodeId();
+          const newNode = { id: nodeId, pos: action.pos, z: action.z };
+          const newSegments = action.connectTo
+            ? [...m.ridgeGraph.segments, { from: action.connectTo, to: nodeId }]
+            : m.ridgeGraph.segments;
+          return {
+            ...m,
+            ridgeGraph: {
+              nodes: [...m.ridgeGraph.nodes, newNode],
+              segments: newSegments,
+            },
+          };
+        }),
+      };
+    }
+
+    case "REMOVE_RIDGE_NODE": {
+      return {
+        ...state,
+        masses: state.masses.map((m) => {
+          if (m.id !== action.massId || !m.ridgeGraph) return m;
+          return {
+            ...m,
+            ridgeGraph: {
+              nodes: m.ridgeGraph.nodes.filter((n) => n.id !== action.nodeId),
+              segments: m.ridgeGraph.segments.filter(
+                (s) => s.from !== action.nodeId && s.to !== action.nodeId,
+              ),
+            },
+          };
+        }),
+      };
+    }
+
+    case "ADD_RIDGE_SEGMENT": {
+      return {
+        ...state,
+        masses: state.masses.map((m) => {
+          if (m.id !== action.massId || !m.ridgeGraph) return m;
+          // Don't add duplicate segments
+          const exists = m.ridgeGraph.segments.some(
+            (s) =>
+              (s.from === action.from && s.to === action.to) ||
+              (s.from === action.to && s.to === action.from),
+          );
+          if (exists) return m;
+          return {
+            ...m,
+            ridgeGraph: {
+              ...m.ridgeGraph,
+              segments: [...m.ridgeGraph.segments, { from: action.from, to: action.to }],
+            },
+          };
+        }),
+      };
+    }
+
+    case "REMOVE_RIDGE_SEGMENT": {
+      return {
+        ...state,
+        masses: state.masses.map((m) => {
+          if (m.id !== action.massId || !m.ridgeGraph) return m;
+          return {
+            ...m,
+            ridgeGraph: {
+              ...m.ridgeGraph,
+              segments: m.ridgeGraph.segments.filter(
+                (s) =>
+                  !(
+                    (s.from === action.from && s.to === action.to) ||
+                    (s.from === action.to && s.to === action.from)
+                  ),
+              ),
+            },
+          };
+        }),
+      };
     }
 
     default:

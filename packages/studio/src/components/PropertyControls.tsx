@@ -1,13 +1,22 @@
+import type { Dispatch } from "react";
 import type { DesignState, RoofConfig } from "../lib/types";
+import type { RidgeGraph } from "../lib/ridgeGraph";
+import type { StudioAction } from "../lib/reducer";
 
 interface PropertyControlsProps {
   design: DesignState;
   onDesignChange: (d: DesignState) => void;
   edgeCount: number;
+  massId: string;
+  ridgeGraph?: RidgeGraph;
+  dispatch: Dispatch<StudioAction>;
 }
 
-export function PropertyControls({ design, onDesignChange, edgeCount }: PropertyControlsProps) {
+export function PropertyControls({
+  design, onDesignChange, edgeCount, massId, ridgeGraph, dispatch,
+}: PropertyControlsProps) {
   const storeyCount = design.storeys.length;
+  const isCustomRoof = !!ridgeGraph;
 
   const setStoreyCount = (count: number) => {
     const clamped = Math.max(1, Math.min(4, count));
@@ -30,8 +39,9 @@ export function PropertyControls({ design, onDesignChange, edgeCount }: Property
     onDesignChange({ ...design, roof: { ...design.roof, ...partial } });
   };
 
-  const showPitch = design.roof.type !== "flat";
-  const showRidgeEdge = design.roof.type === "mono" || design.roof.type === "dual";
+  const showPitch = !isCustomRoof && design.roof.type !== "flat";
+  const showRidgeEdge = !isCustomRoof && (design.roof.type === "mono" || design.roof.type === "dual");
+  const canCustomize = design.roof.type !== "flat";
 
   return (
     <div className="property-controls">
@@ -63,7 +73,14 @@ export function PropertyControls({ design, onDesignChange, edgeCount }: Property
         <label>Type</label>
         <select
           value={design.roof.type}
-          onChange={(e) => setRoof({ type: e.target.value as RoofConfig["type"] })}
+          onChange={(e) => {
+            const newType = e.target.value as RoofConfig["type"];
+            setRoof({ type: newType });
+            // Clear ridge graph when changing type
+            if (isCustomRoof) {
+              dispatch({ type: "SET_ROOF_MODE", massId, mode: "parametric" });
+            }
+          }}
         >
           <option value="flat">flat</option>
           <option value="mono">mono</option>
@@ -71,6 +88,27 @@ export function PropertyControls({ design, onDesignChange, edgeCount }: Property
           <option value="hip">hip</option>
         </select>
       </div>
+
+      {/* Roof mode toggle */}
+      {canCustomize && (
+        <div className="prop-row">
+          <label>Mode</label>
+          <select
+            value={isCustomRoof ? "custom" : "parametric"}
+            onChange={(e) => {
+              dispatch({
+                type: "SET_ROOF_MODE",
+                massId,
+                mode: e.target.value as "parametric" | "custom",
+              });
+            }}
+          >
+            <option value="parametric">parametric</option>
+            <option value="custom">custom</option>
+          </select>
+        </div>
+      )}
+
       {showPitch && (
         <div className="prop-row">
           <label>Pitch {design.roof.pitch}°</label>
@@ -96,6 +134,36 @@ export function PropertyControls({ design, onDesignChange, edgeCount }: Property
             ))}
           </select>
         </div>
+      )}
+
+      {/* Ridge node z-height controls (custom mode) */}
+      {isCustomRoof && ridgeGraph.nodes.length > 0 && (
+        <>
+          <h3 style={{ marginTop: 12 }}>Ridge Nodes</h3>
+          {ridgeGraph.nodes.map((node) => (
+            <div className="prop-row" key={node.id}>
+              <label>{node.id}</label>
+              <input
+                type="number"
+                min={0.1}
+                max={20}
+                step={0.1}
+                value={parseFloat(node.z.toFixed(2))}
+                onChange={(e) => {
+                  const z = parseFloat(e.target.value);
+                  if (!isNaN(z) && z > 0) {
+                    dispatch({
+                      type: "UPDATE_RIDGE_NODE",
+                      massId,
+                      nodeId: node.id,
+                      z,
+                    });
+                  }
+                }}
+              />
+            </div>
+          ))}
+        </>
       )}
     </div>
   );

@@ -1,5 +1,5 @@
 import type { Dispatch } from "react";
-import type { Schedule, FaceModel, Face, FaceOpening } from "@sap-geometry/core";
+import type { Schedule, FaceModel, Face, FaceOpening, SurfaceRow } from "@sap-geometry/core";
 import { azimuthOf, tiltOf } from "@sap-geometry/core";
 import { PropertyControls } from "./PropertyControls";
 import { OpeningForm } from "./OpeningForm";
@@ -271,6 +271,9 @@ export function ScheduleSidebar({
           design={design}
           onDesignChange={handleDesignChange}
           edgeCount={activeMass.vertices.length}
+          massId={activeMass.id}
+          ridgeGraph={activeMass.ridgeGraph}
+          dispatch={dispatch}
         />
       )}
 
@@ -278,6 +281,31 @@ export function ScheduleSidebar({
       {activeMass?.closed && activeMass.openings?.length && (
         <OpeningsTable mass={activeMass} dispatch={dispatch} />
       )}
+
+      {/* Per-face readouts in custom roof mode */}
+      {activeMass?.ridgeGraph && schedule && (() => {
+        const roofRows = schedule.surfaces.filter(
+          (r: SurfaceRow) => r.mass === activeMass.id && r.type === "roof",
+        );
+        if (roofRows.length === 0) return null;
+        return (
+          <>
+            <h3 style={{ marginTop: 12 }}>Roof Faces</h3>
+            <table>
+              <tbody>
+                {roofRows.map((r: SurfaceRow) => (
+                  <tr key={r.name}>
+                    <td>{r.name.replace(`${activeMass.id}_`, "")}</td>
+                    <td>
+                      {r.tilt.toFixed(0)}° {r.area.toFixed(1)}m² {compassDir(r.azimuth)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        );
+      })()}
 
       {/* Schedule totals */}
       {schedule && (

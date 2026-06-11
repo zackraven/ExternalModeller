@@ -10,6 +10,14 @@ import { defaultStudioState } from "./lib/types";
 import { studioReducer } from "./lib/reducer";
 import type { StudioAction } from "./lib/reducer";
 
+function tryParseSpec(text: string): BuildingSpec | null {
+  try {
+    const obj = JSON.parse(text);
+    if (obj && Array.isArray(obj.masses) && obj.masses.length > 0) return obj;
+  } catch { /* ignore */ }
+  return null;
+}
+
 export function App() {
   const [state, dispatch] = useReducer(studioReducer, undefined, defaultStudioState);
 
@@ -38,18 +46,55 @@ export function App() {
     if (!exists) dispatch({ type: "SET_SELECTED_FACE", id: null });
   }, [model, state.selectedFaceId]);
 
+  // Global paste handler
+  useEffect(() => {
+    const handler = (e: ClipboardEvent) => {
+      const text = e.clipboardData?.getData("text");
+      if (!text) return;
+      const parsed = tryParseSpec(text);
+      if (parsed) {
+        e.preventDefault();
+        dispatch({ type: "LOAD_FIXTURE", spec: parsed });
+      }
+    };
+    window.addEventListener("paste", handler);
+    return () => window.removeEventListener("paste", handler);
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const parsed = tryParseSpec(reader.result as string);
+      if (parsed) {
+        dispatch({ type: "LOAD_FIXTURE", spec: parsed });
+      } else {
+        alert("Invalid BuildingSpec JSON: file must contain a \"masses\" array.");
+      }
+    };
+    reader.readAsText(file);
+  }, []);
+
   const handleSelectFace = useCallback((id: string | null) => {
     dispatch({ type: "SET_SELECTED_FACE", id });
   }, []);
 
   return (
     <div className="studio-app">
-      <div className="editor-pane">
+      <div className="editor-pane" onDragOver={handleDragOver} onDrop={handleDrop}>
         <EditorToolbar
           hasDrawingMass={hasDrawingMass}
           hasClosedMass={hasClosedMass}
           canUndo={hasDrawingMass && !!activeMass && activeMass.vertices.length > 0}
           showOverlay={state.showOverlay}
+          spec={spec}
           dispatch={dispatch}
         />
         <SvgCanvas
