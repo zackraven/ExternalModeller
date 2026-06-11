@@ -54,7 +54,7 @@ export function massDesignsFromSpec(spec: BuildingSpec): MassDesign[] {
     const id = mass.id ?? generateMassId();
     const roofType = mass.roof?.type ?? "flat";
     const mappedType: RoofConfig["type"] =
-      roofType === "none" ? "flat" : roofType;
+      (roofType === "none" || roofType === "custom") ? "flat" : roofType;
 
     const design: MassDesign = {
       id,

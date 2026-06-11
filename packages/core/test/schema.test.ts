@@ -179,4 +179,53 @@ describe("Schema — rejects invalid specs", () => {
       }],
     })).toBe(false);
   });
+
+  it("accepts valid custom roof", () => {
+    expect(validate({
+      masses: [{
+        footprint: [[0, 0], [10, 0], [10, 6], [0, 6]],
+        storeys: [{ height: 2.4 }],
+        roof: {
+          type: "custom",
+          faces: [
+            { polygon: [[0, 0, 2.4], [10, 0, 2.4], [10, 3, 4.5], [0, 3, 4.5]] },
+            { polygon: [[10, 6, 2.4], [0, 6, 2.4], [0, 3, 4.5], [10, 3, 4.5]] },
+          ],
+        },
+      }],
+    })).toBe(true);
+  });
+
+  it("rejects custom roof missing faces", () => {
+    expect(validate({
+      masses: [{
+        footprint: [[0, 0], [10, 0], [10, 6], [0, 6]],
+        storeys: [{ height: 2.4 }],
+        roof: { type: "custom" },
+      }],
+    })).toBe(false);
+  });
+
+  it("rejects custom roof with empty faces array", () => {
+    expect(validate({
+      masses: [{
+        footprint: [[0, 0], [10, 0], [10, 6], [0, 6]],
+        storeys: [{ height: 2.4 }],
+        roof: { type: "custom", faces: [] },
+      }],
+    })).toBe(false);
+  });
+
+  it("rejects custom roof face with < 3 vertices", () => {
+    expect(validate({
+      masses: [{
+        footprint: [[0, 0], [10, 0], [10, 6], [0, 6]],
+        storeys: [{ height: 2.4 }],
+        roof: {
+          type: "custom",
+          faces: [{ polygon: [[0, 0, 2.4], [10, 0, 2.4]] }],
+        },
+      }],
+    })).toBe(false);
+  });
 });

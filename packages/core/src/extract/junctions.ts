@@ -1,5 +1,5 @@
 import type { Face, FaceModel, JunctionRow, HalfEdge, Vec3 } from "../types.js";
-import { cross, snap, dist3, tiltOf } from "../geometry.js";
+import { cross, dot, sub, snap, dist3, tiltOf } from "../geometry.js";
 
 export function extractJunctions(model: FaceModel): JunctionRow[] {
   const totals = new Map<string, number>();
@@ -142,9 +142,13 @@ function classifyJunction(he: HalfEdge, f1: Face, f2: Face): string | null {
     return "gable";
   }
 
-  // Roof–roof junction → ridge (or hip ridge)
+  // Roof–roof junction → ridge or valley
   if (f1.tag.type === "roof" && f2.tag.type === "roof") {
-    return "ridge";
+    const edgeDir = sub(he.to, he.from);
+    const c = cross(f1.normal, f2.normal);
+    const d = dot(c, edgeDir);
+    if (Math.abs(d) < 1e-6) return null; // coplanar
+    return d < 0 ? "valley" : "ridge";
   }
 
   return null;

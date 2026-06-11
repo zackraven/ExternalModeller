@@ -32,7 +32,10 @@ BuildingSpec (JSON) → solve() → Schedule (surfaces, openings, junctions, tot
 | `index.ts` | `resolve(spec)` | Orchestrates: walls → floor → roof → components → openings → abutments → occlusion → topology |
 | `walls.ts` | `extrudeWalls(mass, massId)` | Wall faces per edge per storey. Winding: `[A_bot, B_bot, B_top, A_top]` |
 | `floor.ts` | `buildFloor(mass, massId)` | Single floor face at z=0, normal -Z |
-| `roof.ts` | `buildRoof(mass, massId)` | Roof faces: flat/mono/dual/hip. Gable wall triangles for mono/dual |
+| `roof.ts` | `buildRoof(mass, massId)` | Roof faces: flat/mono/dual/hip/custom. Gable wall triangles for mono/dual. Custom: user-supplied 3D polygons + auto-derived gable walls |
+| `wallTopProfile.ts` | `wallTopProfile(edgeA, edgeB, wallTopZ, roofFaces)` | Intersects wall plane with roof faces to derive gable profile points |
+| `suggest.ts` | `suggestRoof(footprint, params, wallTopZ)` | Converts parametric roof → explicit `CustomRoofFace[]` |
+| `validateCustomRoof.ts` | `validateCustomRoof(faces, footprint, wallTopZ)` | Planarity, altitude, degenerate, plan coverage checks |
 | `components.ts` | `placeComponents(faces, mass, massId)` | Dormers (front/cheek/roof faces) and rooflights on roof planes |
 | `openings.ts` | `placeOpenings(faces, mass, massId)` | Mutates faces array, adds FaceOpening entries |
 | `abutment.ts` | `detectAbutments(faces)` | Tags shared footprint-edge walls as `"party"` adjacency |
@@ -45,20 +48,24 @@ BuildingSpec (JSON) → solve() → Schedule (surfaces, openings, junctions, tot
 |---|---|---|
 | `index.ts` | `extract(model, northAngle)` | Aggregates surfaces + openings + junctions + totals |
 | `surfaces.ts` | `extractSurfaces(model, northAngle)` | SurfaceRow[] + OpeningRow[]. Net area = gross - openings - occluded. faceName: `Wall S{s} E{e}`, `Floor`, `Roof P{n}`, `Gable E{e}`, `Dormer {n} Front/Cheek/Roof` |
-| `junctions.ts` | `extractJunctions(model)` | JunctionRow[]. Types: external_corner, internal_corner, wall_ground_floor, wall_exposed_floor, roof_flat_wall, eaves, gable, ridge, opening_head, opening_sill, opening_jamb, party_wall |
+| `junctions.ts` | `extractJunctions(model)` | JunctionRow[]. Types: external_corner, internal_corner, wall_ground_floor, wall_exposed_floor, roof_flat_wall, eaves, gable, ridge, valley, opening_head, opening_sill, opening_jamb, party_wall |
 
 ### Tests (`test/`)
 
 - `geometry.test.ts` — vector ops, winding, newell, azimuth/tilt
 - `phase1.test.ts` — hello-box (4 walls + floor), l-plan (6 walls, corners)
 - `phase3.test.ts` — openings (windows, doors, count, multi-storey)
-- `phase4.test.ts` — roofs (flat, dual-pitch, hip), roof junctions
+- `phase4.test.ts` — roofs (flat, dual-pitch, hip), roof junctions, valley detection
 - `phase5.test.ts` — dormers, rooflights, component placement
 - `phase6.test.ts` — multi-mass party walls, abutment detection
 - `occlusion.test.ts` — clipPolygon unit tests, church cross-mass occlusion, party skip, single-mass unchanged
 - `validation.test.ts` — hand-checked expected values for all 8 fixtures (51 tests)
-- `schema.test.ts` — JSON-schema validation: all fixtures pass, invalid specs rejected (24 tests)
-- `csv.test.ts` — CSV formatter unit tests (15 tests)
+- `schema.test.ts` — JSON-schema validation: all fixtures pass, invalid specs rejected
+- `csv.test.ts` — CSV formatter unit tests
+- `wallTopProfile.test.ts` — wall-roof intersection profile computation
+- `customRoof.test.ts` — custom roof face generation, gable walls, face IDs
+- `suggestRoof.test.ts` — parametric-to-explicit conversion, round-trip equivalence
+- `validateCustomRoof.test.ts` — planarity, altitude, degenerate, coverage validation
 - `cli.test.ts` — CLI integration tests via subprocess (9 tests)
 
 ### Fixtures (`fixtures/`)
@@ -71,6 +78,7 @@ BuildingSpec (JSON) → solve() → Schedule (surfaces, openings, junctions, tot
 - `l-plan.spec.json` — L-shaped 6-edge footprint, flat roof
 - `two-box-party.spec.json` — two 10×6 boxes sharing an edge (party wall)
 - `church.spec.json` — nave (20×10, dual 40°) + tower (4×4, 3 storeys, hip 75°), cross-mass occlusion
+- `hello-box-custom-dual.spec.json` — hello-box dual-pitch expressed as custom roof faces
 
 ### Schema & Docs
 
@@ -95,7 +103,7 @@ React + Three.js viewer. `npm run dev` → Vite on localhost:5173.
 - **Snap tolerance**: `SNAP = 1e-4`, `EPS = 1e-6`.
 - **Face IDs**: `${massId}_wall_s${si}_e${ei}`, `${massId}_floor`, `${massId}_roof_p${i}`, `${massId}_gable_e${ei}`, `${massId}_dormer_${ci}_front/cheek/roof`.
 - **FaceTag.type**: `"wall" | "floor" | "roof" | "dormer_front" | "dormer_cheek" | "dormer_roof"`.
-- **Run tests**: `cd packages/core && npx vitest run` (235 tests across 11 files).
+- **Run tests**: `cd packages/core && npx vitest run`.
 - **Type-check viewer**: `cd packages/viewer && npx tsc --noEmit`.
 - **Deps**: core has `polygon-clipping` (runtime), `ajv`/`@types/node`/`vitest`/`typescript` (dev).
 
@@ -107,6 +115,10 @@ React + Three.js viewer. `npm run dev` → Vite on localhost:5173.
 - **Phase 6**: multi-mass abutment detection, party wall junctions, cross-mass face occlusion
 - **Phase 7**: validation suite (hand-checked expected values for all fixtures), SPEC.md, JSON schema
 - **Phase 8**: CLI (`surface-modeller` bin) and CSV export
+
+### Studio Phase 3 — Explicit roof representation (core)
+
+`type: "custom"` in `Roof` spec allows user-supplied 3D face polygons instead of parametric generation. `suggestRoof()` converts parametric params (flat/mono/dual/hip) into explicit `CustomRoofFace[]` as a starting point. `wallTopProfile()` intersects wall planes with roof faces to derive gable wall profiles. `validateCustomRoof()` checks planarity, altitude, degenerate faces, and plan coverage. Valley junctions are now distinguished from ridges via `cross(n1, n2) · edgeDir` sign. New fixture: `hello-box-custom-dual.spec.json`.
 
 ### Studio Phase 0 — Dormer placement decoupled from rectangular faces
 

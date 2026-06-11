@@ -1,5 +1,7 @@
-import type { Mass, Face, Vec2, Vec3 } from "../types.js";
+import type { Mass, Face, Vec2, Vec3, CustomRoofFace } from "../types.js";
 import { newell, ensureCCW, snapVec3 } from "../geometry.js";
+import { wallTopProfile } from "./wallTopProfile.js";
+import { validateCustomRoof } from "./validateCustomRoof.js";
 
 const SNAP = 1e-4;
 
@@ -21,6 +23,8 @@ export function buildRoof(mass: Mass, massId: string): Face[] {
       return buildDualRoof(footprint, wallTopZ, massId, lastStorey, roof.pitch ?? 35, roof.ridgeEdge);
     case "hip":
       return buildHipRoof(footprint, wallTopZ, massId, lastStorey, roof.pitch ?? 35, roof.ridgeEdge);
+    case "custom":
+      return buildCustomRoof(roof.faces!, footprint, wallTopZ, massId, lastStorey);
     default:
       return [];
   }
@@ -448,6 +452,58 @@ function buildHipRoof(
     rA,
   ];
   faces.push(makeFace(`${massId}_roof_p3`, plane3, massId, lastStorey, "roof", "external"));
+
+  return faces;
+}
+
+// -- Custom -------------------------------------------------------
+
+function buildCustomRoof(
+  customFaces: CustomRoofFace[],
+  footprint: Vec2[],
+  wallTopZ: number,
+  massId: string,
+  lastStorey: number,
+): Face[] {
+  // Validate custom faces
+  const validationErrors = validateCustomRoof(customFaces, footprint, wallTopZ);
+  const hardErrors = validationErrors.filter(e => e.severity === "error");
+  if (hardErrors.length > 0) {
+    throw new Error(
+      `Invalid custom roof: ${hardErrors.map(e => e.message).join("; ")}`,
+    );
+  }
+
+  const faces: Face[] = [];
+
+  // Create Face objects from explicit polygons
+  for (let i = 0; i < customFaces.length; i++) {
+    const verts: Vec3[] = customFaces[i].polygon.map(v => snapVec3(v));
+    faces.push(makeFace(
+      `${massId}_roof_p${i}`, verts, massId, lastStorey, "roof", "external",
+    ));
+  }
+
+  // For each footprint edge, derive gable wall from roof profile
+  const n = footprint.length;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    const edgeA = footprint[i];
+    const edgeB = footprint[j];
+
+    const profile = wallTopProfile(edgeA, edgeB, wallTopZ, faces);
+    if (profile.length === 0) continue;
+
+    const gableVerts: Vec3[] = [
+      snapVec3([edgeA[0], edgeA[1], wallTopZ]),
+      snapVec3([edgeB[0], edgeB[1], wallTopZ]),
+      ...profile,
+    ];
+
+    faces.push(makeFace(
+      `${massId}_gable_e${i}`, gableVerts, massId, lastStorey, "wall", "external", i,
+    ));
+  }
 
   return faces;
 }

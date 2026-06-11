@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { solve } from "../src/solve.js";
 import { resolve } from "../src/resolve/index.js";
-import type { BuildingSpec, Schedule, JunctionRow } from "../src/types.js";
+import type { BuildingSpec, Schedule, JunctionRow, Vec3 } from "../src/types.js";
 import helloBoxSpec from "../fixtures/hello-box.spec.json";
 import helloBoxDualSpec from "../fixtures/hello-box-dual.spec.json";
 import helloBoxHipSpec from "../fixtures/hello-box-hip.spec.json";
@@ -411,5 +411,61 @@ describe("Phase 4 — dual roof on pentagon: ridge-crossing gable walls", () => 
     // (0,5)->(0,0): 0-0=0
     // Sum=94, area=47
     expect(projectedSum).toBeCloseTo(47, 0);
+  });
+});
+
+// ── Valley junction detection ──────────────────────────────
+
+describe("Phase 4 — valley junction detection", () => {
+  it("hello-box-dual has ridge = 10, valley = 0", () => {
+    const schedule = solve(helloBoxDualSpec as BuildingSpec);
+    expect(junctionLen(schedule, "ridge")).toBeCloseTo(10, TOL);
+    expect(junctionLen(schedule, "valley")).toBe(0);
+  });
+
+  it("hello-box-hip has ridge ≈ 22.94, valley = 0", () => {
+    const schedule = solve(helloBoxHipSpec as BuildingSpec);
+    expect(junctionLen(schedule, "ridge")).toBeCloseTo(22.94, TOL);
+    expect(junctionLen(schedule, "valley")).toBe(0);
+  });
+
+  it("L-plan custom roof with valley produces valley > 0", () => {
+    // Two intersecting dual-pitch roof sections forming a valley
+    // Section 1: covers the lower rectangle (0,0)-(10,4), ridge at y=2
+    // Section 2: covers the upper rectangle (0,4)-(4,8), ridge at x=2
+    const wtz = 2.4;
+    const tan35 = Math.tan(35 * Math.PI / 180);
+    const ridge1Z = wtz + 2 * tan35; // y=2 is halfSpan of 4m-wide section
+    const ridge2Z = wtz + 2 * tan35; // x=2 is halfSpan of 4m-wide section
+
+    // Section 1 roof faces (dual along y, ridge at y=2)
+    const s1f0: Vec3[] = [[0,0,wtz],[10,0,wtz],[10,2,ridge1Z],[0,2,ridge1Z]];
+    const s1f1: Vec3[] = [[10,4,wtz],[0,4,wtz],[0,2,ridge1Z],[10,2,ridge1Z]];
+    // Section 2 roof faces (dual along x, ridge at x=2)
+    const s2f0: Vec3[] = [[0,4,wtz],[0,8,wtz],[2,8,ridge2Z],[2,4,ridge2Z]];
+    const s2f1: Vec3[] = [[4,8,wtz],[4,4,wtz],[2,4,ridge2Z],[2,8,ridge2Z]];
+
+    const spec: BuildingSpec = {
+      masses: [{
+        footprint: [[0,0],[10,0],[10,4],[4,4],[4,8],[0,8]],
+        storeys: [{ height: 2.4 }],
+        roof: {
+          type: "custom",
+          faces: [
+            { polygon: s1f0 },
+            { polygon: s1f1 },
+            { polygon: s2f0 },
+            { polygon: s2f1 },
+          ],
+        },
+      }],
+    };
+
+    const schedule = solve(spec);
+    const ridgeLen = junctionLen(schedule, "ridge");
+    const valleyLen = junctionLen(schedule, "valley");
+
+    expect(ridgeLen).toBeGreaterThan(0);
+    expect(valleyLen).toBeGreaterThan(0);
   });
 });

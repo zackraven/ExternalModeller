@@ -98,36 +98,75 @@
         }
       }
     },
+    "Vec3": {
+      "type": "array",
+      "items": { "type": "number" },
+      "minItems": 3,
+      "maxItems": 3,
+      "description": "[x, y, z] coordinate in metres."
+    },
+    "CustomRoofFace": {
+      "type": "object",
+      "required": ["polygon"],
+      "additionalProperties": false,
+      "properties": {
+        "polygon": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/Vec3" },
+          "minItems": 3,
+          "description": "3D polygon vertices defining a roof face."
+        }
+      }
+    },
     "Roof": {
       "type": "object",
       "required": ["type"],
-      "additionalProperties": false,
-      "properties": {
-        "type": {
-          "type": "string",
-          "enum": ["flat", "mono", "dual", "hip", "none"],
-          "description": "Roof form. \"none\" omits the roof entirely."
-        },
-        "pitch": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 90,
-          "description": "Pitch angle in degrees. Required for mono/dual/hip; ignored for flat/none."
-        },
-        "ridgeEdge": {
-          "type": "integer",
-          "minimum": 0,
-          "description": "Footprint edge index that the ridge runs parallel to. Defaults to the longest edge. Only used for mono/dual/hip."
-        }
-      },
-      "allOf": [
+      "oneOf": [
         {
-          "if": {
-            "properties": { "type": { "enum": ["mono", "dual", "hip"] } }
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["flat", "mono", "dual", "hip", "none"]
+            },
+            "pitch": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 90,
+              "description": "Pitch angle in degrees. Required for mono/dual/hip; ignored for flat/none."
+            },
+            "ridgeEdge": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Footprint edge index that the ridge runs parallel to. Defaults to the longest edge. Only used for mono/dual/hip."
+            }
           },
-          "then": {
-            "required": ["pitch"]
-          }
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "if": {
+                "properties": { "type": { "enum": ["mono", "dual", "hip"] } }
+              },
+              "then": {
+                "required": ["pitch"]
+              }
+            }
+          ]
+        },
+        {
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "custom"
+            },
+            "faces": {
+              "type": "array",
+              "items": { "$ref": "#/definitions/CustomRoofFace" },
+              "minItems": 1,
+              "description": "Explicit 3D roof face polygons."
+            }
+          },
+          "required": ["type", "faces"],
+          "additionalProperties": false
         }
       ]
     },

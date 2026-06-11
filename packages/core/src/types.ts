@@ -25,10 +25,15 @@ export interface Storey {
   height: number;
 }
 
+export interface CustomRoofFace {
+  polygon: Vec3[];
+}
+
 export interface Roof {
-  type: "flat" | "mono" | "dual" | "hip" | "none";
+  type: "flat" | "mono" | "dual" | "hip" | "none" | "custom";
   pitch?: number;
   ridgeEdge?: number;
+  faces?: CustomRoofFace[];  // required when type = "custom"
 }
 
 export interface Opening {
