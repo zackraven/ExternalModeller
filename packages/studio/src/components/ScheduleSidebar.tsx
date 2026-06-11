@@ -2,6 +2,9 @@ import type { Dispatch } from "react";
 import type { Schedule, FaceModel, Face, FaceOpening } from "@sap-geometry/core";
 import { azimuthOf, tiltOf } from "@sap-geometry/core";
 import { PropertyControls } from "./PropertyControls";
+import { OpeningForm } from "./OpeningForm";
+import { OpeningsTable } from "./OpeningsTable";
+import { parseWallFaceId } from "../lib/faceIdUtils";
 import type { MassDesign, DesignState } from "../lib/types";
 import type { StudioAction } from "../lib/reducer";
 
@@ -127,9 +130,34 @@ export function ScheduleSidebar({
   if (selectedFaceId && model) {
     const face = model.faces.find((f) => f.id === selectedFaceId);
     if (face) {
+      const wallRef = parseWallFaceId(selectedFaceId);
+      const wallMass = wallRef
+        ? masses.find((m) => m.id === wallRef.massId)
+        : null;
+
+      // Find existing opening on this (storey, edge) — enforce one per wall
+      let existingIndex: number | undefined;
+      if (wallRef && wallMass?.openings) {
+        const idx = wallMass.openings.findIndex(
+          (o) => o.storey === wallRef.storey && o.edge === wallRef.edge,
+        );
+        if (idx >= 0) existingIndex = idx;
+      }
+
       return (
         <div className="schedule-sidebar">
           <FaceDetailTable face={face} />
+          {wallRef && wallMass && (
+            <OpeningForm
+              key={`${wallRef.massId}_${wallRef.storey}_${wallRef.edge}_${existingIndex ?? "new"}`}
+              massId={wallRef.massId}
+              storey={wallRef.storey}
+              edge={wallRef.edge}
+              mass={wallMass}
+              existingIndex={existingIndex}
+              dispatch={dispatch}
+            />
+          )}
         </div>
       );
     }
@@ -244,6 +272,11 @@ export function ScheduleSidebar({
           onDesignChange={handleDesignChange}
           edgeCount={activeMass.vertices.length}
         />
+      )}
+
+      {/* Openings table for active mass */}
+      {activeMass?.closed && activeMass.openings?.length && (
+        <OpeningsTable mass={activeMass} dispatch={dispatch} />
       )}
 
       {/* Schedule totals */}

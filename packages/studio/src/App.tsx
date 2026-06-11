@@ -27,10 +27,16 @@ export function App() {
 
   const { model, schedule, error } = useModel(spec);
 
-  // Clear selection when spec changes (face IDs change on rebuild)
+  // Clear selection only when the selected face/opening no longer exists
   useEffect(() => {
-    dispatch({ type: "SET_SELECTED_FACE", id: null });
-  }, [spec]);
+    if (!state.selectedFaceId || !model) return;
+    const exists = model.faces.some(
+      (f) =>
+        f.id === state.selectedFaceId ||
+        f.openings.some((o) => o.id === state.selectedFaceId),
+    );
+    if (!exists) dispatch({ type: "SET_SELECTED_FACE", id: null });
+  }, [model, state.selectedFaceId]);
 
   const handleSelectFace = useCallback((id: string | null) => {
     dispatch({ type: "SET_SELECTED_FACE", id });

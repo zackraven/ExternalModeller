@@ -352,6 +352,153 @@ describe("TOGGLE_OVERLAY", () => {
   });
 });
 
+describe("ADD_OPENING", () => {
+  it("appends opening to mass", () => {
+    const s = dispatchMany(defaultStudioState(), [
+      { type: "ADD_MASS" },
+      { type: "ADD_VERTEX", vertex: [0, 0] },
+      { type: "ADD_VERTEX", vertex: [10, 0] },
+      { type: "ADD_VERTEX", vertex: [10, 6] },
+      { type: "CLOSE_MASS" },
+    ]);
+    const id = s.masses[0].id;
+    const s2 = dispatch(s, {
+      type: "ADD_OPENING",
+      massId: id,
+      opening: { storey: 0, edge: 0, type: "window", width: 1.2, height: 1.2, sill: 0.9 },
+    });
+    expect(s2.masses[0].openings).toHaveLength(1);
+    expect(s2.masses[0].openings![0].type).toBe("window");
+  });
+
+  it("creates openings array if missing", () => {
+    const s = dispatchMany(defaultStudioState(), [
+      { type: "ADD_MASS" },
+      { type: "ADD_VERTEX", vertex: [0, 0] },
+      { type: "ADD_VERTEX", vertex: [10, 0] },
+      { type: "ADD_VERTEX", vertex: [10, 6] },
+      { type: "CLOSE_MASS" },
+    ]);
+    expect(s.masses[0].openings).toBeUndefined();
+    const id = s.masses[0].id;
+    const s2 = dispatch(s, {
+      type: "ADD_OPENING",
+      massId: id,
+      opening: { storey: 0, edge: 0, type: "door", width: 0.9, height: 2.1 },
+    });
+    expect(s2.masses[0].openings).toHaveLength(1);
+  });
+});
+
+describe("UPDATE_OPENING", () => {
+  it("replaces opening at index", () => {
+    const s = dispatchMany(defaultStudioState(), [
+      { type: "ADD_MASS" },
+      { type: "ADD_VERTEX", vertex: [0, 0] },
+      { type: "ADD_VERTEX", vertex: [10, 0] },
+      { type: "ADD_VERTEX", vertex: [10, 6] },
+      { type: "CLOSE_MASS" },
+    ]);
+    const id = s.masses[0].id;
+    let s2 = dispatch(s, {
+      type: "ADD_OPENING",
+      massId: id,
+      opening: { storey: 0, edge: 0, type: "window", width: 1.2, height: 1.2, sill: 0.9 },
+    });
+    s2 = dispatch(s2, {
+      type: "UPDATE_OPENING",
+      massId: id,
+      index: 0,
+      opening: { storey: 0, edge: 0, type: "door", width: 0.9, height: 2.1 },
+    });
+    expect(s2.masses[0].openings).toHaveLength(1);
+    expect(s2.masses[0].openings![0].type).toBe("door");
+  });
+});
+
+describe("REMOVE_OPENING", () => {
+  it("removes opening at index", () => {
+    const s = dispatchMany(defaultStudioState(), [
+      { type: "ADD_MASS" },
+      { type: "ADD_VERTEX", vertex: [0, 0] },
+      { type: "ADD_VERTEX", vertex: [10, 0] },
+      { type: "ADD_VERTEX", vertex: [10, 6] },
+      { type: "CLOSE_MASS" },
+    ]);
+    const id = s.masses[0].id;
+    let s2 = dispatch(s, {
+      type: "ADD_OPENING",
+      massId: id,
+      opening: { storey: 0, edge: 0, type: "window", width: 1.2, height: 1.2, sill: 0.9 },
+    });
+    s2 = dispatch(s2, {
+      type: "ADD_OPENING",
+      massId: id,
+      opening: { storey: 0, edge: 1, type: "door", width: 0.9, height: 2.1 },
+    });
+    expect(s2.masses[0].openings).toHaveLength(2);
+    s2 = dispatch(s2, { type: "REMOVE_OPENING", massId: id, index: 0 });
+    expect(s2.masses[0].openings).toHaveLength(1);
+    expect(s2.masses[0].openings![0].type).toBe("door");
+  });
+
+  it("sets openings to undefined when last one removed", () => {
+    const s = dispatchMany(defaultStudioState(), [
+      { type: "ADD_MASS" },
+      { type: "ADD_VERTEX", vertex: [0, 0] },
+      { type: "ADD_VERTEX", vertex: [10, 0] },
+      { type: "ADD_VERTEX", vertex: [10, 6] },
+      { type: "CLOSE_MASS" },
+    ]);
+    const id = s.masses[0].id;
+    let s2 = dispatch(s, {
+      type: "ADD_OPENING",
+      massId: id,
+      opening: { storey: 0, edge: 0, type: "window", width: 1.2, height: 1.2, sill: 0.9 },
+    });
+    s2 = dispatch(s2, { type: "REMOVE_OPENING", massId: id, index: 0 });
+    expect(s2.masses[0].openings).toBeUndefined();
+  });
+});
+
+describe("cleanOpenings on UPDATE_MASS", () => {
+  it("removes openings on non-existent storeys after storey reduction", () => {
+    const s = dispatchMany(defaultStudioState(), [
+      { type: "ADD_MASS" },
+      { type: "ADD_VERTEX", vertex: [0, 0] },
+      { type: "ADD_VERTEX", vertex: [10, 0] },
+      { type: "ADD_VERTEX", vertex: [10, 6] },
+      { type: "CLOSE_MASS" },
+    ]);
+    const id = s.masses[0].id;
+    // Add 2 storeys, then add opening on storey 1
+    let s2 = dispatch(s, {
+      type: "UPDATE_MASS",
+      id,
+      patch: { storeys: [{ height: 2.4 }, { height: 2.4 }] },
+    });
+    s2 = dispatch(s2, {
+      type: "ADD_OPENING",
+      massId: id,
+      opening: { storey: 0, edge: 0, type: "window", width: 1.2, height: 1.2, sill: 0.9 },
+    });
+    s2 = dispatch(s2, {
+      type: "ADD_OPENING",
+      massId: id,
+      opening: { storey: 1, edge: 0, type: "window", width: 1.0, height: 1.0, sill: 0.5 },
+    });
+    expect(s2.masses[0].openings).toHaveLength(2);
+    // Reduce to 1 storey — opening on storey 1 should be cleaned
+    s2 = dispatch(s2, {
+      type: "UPDATE_MASS",
+      id,
+      patch: { storeys: [{ height: 2.4 }] },
+    });
+    expect(s2.masses[0].openings).toHaveLength(1);
+    expect(s2.masses[0].openings![0].storey).toBe(0);
+  });
+});
+
 describe("massDesignsFromSpec", () => {
   it("converts masses preserving ids", () => {
     const spec: BuildingSpec = {

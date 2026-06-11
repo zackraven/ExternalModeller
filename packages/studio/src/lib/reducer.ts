@@ -1,4 +1,4 @@
-import type { Vec2, BuildingSpec, Mass } from "@sap-geometry/core";
+import type { Vec2, BuildingSpec, Mass, Opening } from "@sap-geometry/core";
 import type { MassDesign, StudioState, RoofConfig } from "./types";
 import { defaultMass, defaultStudioState, generateMassId } from "./types";
 import { DEFAULT_STOREY_HEIGHT } from "./constants";
@@ -15,6 +15,9 @@ export type StudioAction =
   | { type: "CLOSE_MASS" }
   | { type: "UNDO_VERTEX" }
   | { type: "MOVE_VERTEX"; massId: string; index: number; pos: Vec2 }
+  | { type: "ADD_OPENING"; massId: string; opening: Opening }
+  | { type: "UPDATE_OPENING"; massId: string; index: number; opening: Opening }
+  | { type: "REMOVE_OPENING"; massId: string; index: number }
   | { type: "LOAD_FIXTURE"; spec: BuildingSpec }
   | { type: "CLEAR_ALL" }
   | { type: "SET_SELECTED_FACE"; id: string | null }
@@ -33,6 +36,17 @@ function polygonArea(verts: Vec2[]): number {
     a += verts[i][0] * verts[j][1] - verts[j][0] * verts[i][1];
   }
   return Math.abs(a) / 2;
+}
+
+/** Remove openings referencing non-existent storeys or edges. */
+function cleanOpenings(mass: MassDesign): Opening[] | undefined {
+  if (!mass.openings?.length) return mass.openings;
+  const maxStorey = mass.storeys.length - 1;
+  const maxEdge = mass.vertices.length - 1;
+  const kept = mass.openings.filter(
+    (o) => o.storey >= 0 && o.storey <= maxStorey && o.edge >= 0 && o.edge <= maxEdge,
+  );
+  return kept.length > 0 ? kept : undefined;
 }
 
 export function massDesignsFromSpec(spec: BuildingSpec): MassDesign[] {
@@ -128,9 +142,12 @@ export function studioReducer(
     case "UPDATE_MASS": {
       return {
         ...state,
-        masses: state.masses.map((m) =>
-          m.id === action.id ? { ...m, ...action.patch } : m,
-        ),
+        masses: state.masses.map((m) => {
+          if (m.id !== action.id) return m;
+          const updated = { ...m, ...action.patch };
+          updated.openings = cleanOpenings(updated);
+          return updated;
+        }),
         selectedFaceId: null,
       };
     }
@@ -201,6 +218,44 @@ export function studioReducer(
             : m,
         ),
         selectedFaceId: null,
+      };
+    }
+
+    case "ADD_OPENING": {
+      return {
+        ...state,
+        masses: state.masses.map((m) =>
+          m.id === action.massId
+            ? { ...m, openings: [...(m.openings ?? []), action.opening] }
+            : m,
+        ),
+      };
+    }
+
+    case "UPDATE_OPENING": {
+      return {
+        ...state,
+        masses: state.masses.map((m) =>
+          m.id === action.massId
+            ? {
+                ...m,
+                openings: (m.openings ?? []).map((o, i) =>
+                  i === action.index ? action.opening : o,
+                ),
+              }
+            : m,
+        ),
+      };
+    }
+
+    case "REMOVE_OPENING": {
+      return {
+        ...state,
+        masses: state.masses.map((m) => {
+          if (m.id !== action.massId) return m;
+          const openings = (m.openings ?? []).filter((_, i) => i !== action.index);
+          return { ...m, openings: openings.length > 0 ? openings : undefined };
+        }),
       };
     }
 

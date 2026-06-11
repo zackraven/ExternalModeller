@@ -165,6 +165,14 @@ export function SvgCanvas({ masses, activeMassId, dispatch }: SvgCanvasProps) {
 
       if (bestMass) {
         dispatch({ type: "SET_ACTIVE_MASS", id: bestMass.id });
+        return;
+      }
+
+      // No masses at all → auto-create a drawing mass and place first vertex
+      if (masses.length === 0) {
+        const snapped = snapToGrid(world, GRID_STEP);
+        dispatch({ type: "ADD_MASS" });
+        dispatch({ type: "ADD_VERTEX", vertex: snapped });
       }
     },
     [isDrawing, cursorPos, isPanning, isNearClose, firstVertex, masses, activeMassId, dispatch],
@@ -297,6 +305,7 @@ export function SvgCanvas({ masses, activeMassId, dispatch }: SvgCanvasProps) {
             worldPerPx,
             hoverIndex: isActive ? hoverIndex : null,
             dragIndex: isActive ? dragIndex : null,
+            showOpenings: isActive,
           });
         })}
 
@@ -346,6 +355,7 @@ interface MassRenderOpts {
   worldPerPx: number;
   hoverIndex: number | null;
   dragIndex: number | null;
+  showOpenings: boolean;
 }
 
 function renderMassPolygon(
@@ -354,7 +364,7 @@ function renderMassPolygon(
   opts: MassRenderOpts,
 ) {
   const { vertices, closed } = mass;
-  const { strokeW, vertexR, hoverR, worldPerPx, hoverIndex, dragIndex } = opts;
+  const { strokeW, vertexR, hoverR, worldPerPx, hoverIndex, dragIndex, showOpenings } = opts;
 
   if (vertices.length === 0) return null;
 
@@ -492,6 +502,57 @@ function renderMassPolygon(
           />
         );
       })}
+
+      {/* Opening tick marks */}
+      {showOpenings &&
+        closed &&
+        mass.openings?.map((opening, oi) => {
+          const ei = opening.edge;
+          if (ei < 0 || ei >= vertices.length) return null;
+          const va = vertices[ei];
+          const vb = vertices[(ei + 1) % vertices.length];
+          const edgeDx = vb[0] - va[0];
+          const edgeDy = vb[1] - va[1];
+          const edgeLen = Math.hypot(edgeDx, edgeDy);
+          if (edgeLen < 1e-6) return null;
+
+          // Unit vectors along edge and outward normal
+          const ux = edgeDx / edgeLen;
+          const uy = edgeDy / edgeLen;
+          // Outward normal (for CCW winding, right-hand rule: rotate edge dir -90°)
+          const nx = uy;
+          const ny = -ux;
+          const offset = vertexR * 2;
+
+          const n = opening.count ?? 1;
+          const cellLen = edgeLen / n;
+          const halfW = opening.width / 2;
+
+          const ticks: { x1: number; y1: number; x2: number; y2: number }[] = [];
+          for (let k = 0; k < n; k++) {
+            const centerT = (k + 0.5) * cellLen;
+            const cx = va[0] + ux * centerT + nx * offset;
+            const cy = va[1] + uy * centerT + ny * offset;
+            ticks.push({
+              x1: cx - ux * halfW,
+              y1: cy - uy * halfW,
+              x2: cx + ux * halfW,
+              y2: cy + uy * halfW,
+            });
+          }
+
+          return ticks.map((t, ti) => (
+            <line
+              key={`${mass.id}-otick-${oi}-${ti}`}
+              className="svg-opening-tick"
+              x1={t.x1}
+              y1={t.y1}
+              x2={t.x2}
+              y2={t.y2}
+              strokeWidth={strokeW * 1.5}
+            />
+          ));
+        })}
     </g>
   );
 }

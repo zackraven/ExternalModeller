@@ -436,3 +436,120 @@ html, body, #root {
   opacity: 0.4;
   cursor: default;
 }
+
+/* ── Opening form ───────────────────────────────── */
+
+.opening-form-context {
+  color: #556677;
+  font-size: 11px;
+  margin-bottom: 8px;
+}
+
+.opening-form-error {
+  color: #e94560;
+  font-size: 11px;
+  margin: 4px 0;
+  padding: 4px 6px;
+  background: rgba(233, 69, 96, 0.1);
+  border-radius: 3px;
+}
+
+.opening-form-submit {
+  width: 100%;
+  padding: 6px 12px;
+  margin-top: 8px;
+  border: 1px solid #4fc3f7;
+  border-radius: 4px;
+  background: rgba(79, 195, 247, 0.15);
+  color: #4fc3f7;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.opening-form-submit:hover {
+  background: rgba(79, 195, 247, 0.3);
+}
+
+/* ── Openings table ─────────────────────────────── */
+
+.openings-table {
+  margin-top: 12px;
+}
+
+.openings-table h3 {
+  font-size: 14px;
+  margin-bottom: 8px;
+  color: #4fc3f7;
+  border-bottom: 1px solid #0f3460;
+  padding-bottom: 4px;
+}
+
+.opening-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 3px 4px;
+  margin-bottom: 2px;
+  border-radius: 3px;
+}
+
+.opening-row:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.opening-row-info {
+  color: #8899aa;
+  font-size: 11px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.opening-row-actions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.opening-edit-btn {
+  padding: 1px 6px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: #4fc3f7;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.opening-edit-btn:hover {
+  background: rgba(79, 195, 247, 0.15);
+}
+
+.opening-delete-btn {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: #667;
+  font-size: 14px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.opening-delete-btn:hover {
+  color: #e94560;
+  background: rgba(233, 69, 96, 0.15);
+}
+
+/* ── SVG opening tick marks ─────────────────────── */
+
+.svg-opening-tick {
+  stroke: #4fc3f7;
+  opacity: 0.6;
+  fill: none;
+  pointer-events: none;
+}

@@ -1,7 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { massDesignsFromSpec } from "../reducer";
+import { massDesignsFromSpec, studioReducer } from "../reducer";
+import type { StudioAction } from "../reducer";
 import { buildSpecFromMasses } from "../specFromVertices";
 import { FIXTURES } from "../fixtures";
+import { defaultStudioState, resetMassCounter } from "../types";
+import type { StudioState } from "../types";
 
 describe("round-trip: massDesignsFromSpec → buildSpecFromMasses", () => {
   for (const fixture of FIXTURES) {
@@ -93,5 +96,36 @@ describe("round-trip: massDesignsFromSpec → buildSpecFromMasses", () => {
     expect(rebuilt.masses[0].roof?.type).toBe("flat");
     expect(rebuilt.masses[0].roof?.pitch).toBeUndefined();
     expect(rebuilt.masses[0].roof?.ridgeEdge).toBeUndefined();
+  });
+});
+
+describe("hello-box-window from studio state", () => {
+  function dispatch(state: StudioState, action: StudioAction): StudioState {
+    return studioReducer(state, action);
+  }
+
+  it("generates spec matching hello-box-window fixture", () => {
+    resetMassCounter();
+    let s = dispatch(defaultStudioState(), { type: "ADD_MASS" });
+    s = dispatch(s, { type: "ADD_VERTEX", vertex: [0, 0] });
+    s = dispatch(s, { type: "ADD_VERTEX", vertex: [10, 0] });
+    s = dispatch(s, { type: "ADD_VERTEX", vertex: [10, 6] });
+    s = dispatch(s, { type: "ADD_VERTEX", vertex: [0, 6] });
+    s = dispatch(s, { type: "CLOSE_MASS" });
+
+    const massId = s.masses[0].id;
+    s = dispatch(s, {
+      type: "ADD_OPENING",
+      massId,
+      opening: { storey: 0, edge: 0, type: "window", width: 1.2, height: 1.2, sill: 0.9 },
+    });
+
+    const spec = buildSpecFromMasses(s.masses);
+    expect(spec.masses).toHaveLength(1);
+    expect(spec.masses[0].footprint).toEqual([[0, 0], [10, 0], [10, 6], [0, 6]]);
+    expect(spec.masses[0].openings).toHaveLength(1);
+    expect(spec.masses[0].openings![0]).toEqual({
+      storey: 0, edge: 0, type: "window", width: 1.2, height: 1.2, sill: 0.9,
+    });
   });
 });
