@@ -1,4 +1,5 @@
 import type { Dispatch } from "react";
+import type { RoofCut } from "@sap-geometry/core";
 import type { DesignState, RoofConfig } from "../lib/types";
 import type { RidgeGraph } from "../lib/ridgeGraph";
 import type { StudioAction } from "../lib/reducer";
@@ -9,11 +10,12 @@ interface PropertyControlsProps {
   edgeCount: number;
   massId: string;
   ridgeGraph?: RidgeGraph;
+  roofCuts?: RoofCut[];
   dispatch: Dispatch<StudioAction>;
 }
 
 export function PropertyControls({
-  design, onDesignChange, edgeCount, massId, ridgeGraph, dispatch,
+  design, onDesignChange, edgeCount, massId, ridgeGraph, roofCuts, dispatch,
 }: PropertyControlsProps) {
   const storeyCount = design.storeys.length;
   const isCustomRoof = !!ridgeGraph;
@@ -165,6 +167,89 @@ export function PropertyControls({
               />
             </div>
           ))}
+        </>
+      )}
+
+      {/* Cut-plane roof controls */}
+      {isCutsMode && (
+        <>
+          <h3 style={{ marginTop: 12 }}>Cuts</h3>
+          <p style={{ fontSize: "0.85em", opacity: 0.7, margin: "4px 0 8px" }}>
+            Click canvas to add a cut (2 clicks).
+          </p>
+          {(roofCuts ?? []).map((cut) => {
+            const wallTopZ = design.storeys.reduce((s, st) => s + st.height, 0);
+            return (
+              <div key={cut.id} style={{ border: "1px solid #444", borderRadius: 4, padding: 6, marginBottom: 6 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                  <strong style={{ fontSize: "0.85em" }}>{cut.id}</strong>
+                  <button
+                    style={{ fontSize: "0.8em", padding: "1px 6px" }}
+                    onClick={() => dispatch({ type: "DELETE_CUT", massId, cutId: cut.id })}
+                    title="Delete cut"
+                  >
+                    ×
+                  </button>
+                </div>
+                <div className="prop-row">
+                  <label>Pitch</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={89}
+                    step={1}
+                    value={cut.pitch}
+                    onChange={(e) => {
+                      const v = parseFloat(e.target.value);
+                      if (!isNaN(v) && v >= 1 && v <= 89) {
+                        dispatch({ type: "UPDATE_CUT", massId, cutId: cut.id, patch: { pitch: v } });
+                      }
+                    }}
+                    style={{ width: 60 }}
+                  />
+                </div>
+                <div className="prop-row">
+                  <label>Eaves Z</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={30}
+                    step={0.1}
+                    value={cut.eavesZ ?? wallTopZ}
+                    placeholder={wallTopZ.toFixed(1)}
+                    onChange={(e) => {
+                      const v = parseFloat(e.target.value);
+                      if (!isNaN(v) && v > 0) {
+                        dispatch({
+                          type: "UPDATE_CUT",
+                          massId,
+                          cutId: cut.id,
+                          patch: { eavesZ: Math.abs(v - wallTopZ) < 0.001 ? undefined : v },
+                        });
+                      }
+                    }}
+                    style={{ width: 60 }}
+                  />
+                </div>
+                <div className="prop-row">
+                  <label>Side</label>
+                  <button
+                    style={{ fontSize: "0.8em", padding: "2px 8px" }}
+                    onClick={() =>
+                      dispatch({
+                        type: "UPDATE_CUT",
+                        massId,
+                        cutId: cut.id,
+                        patch: { side: cut.side === "left" ? "right" : "left" },
+                      })
+                    }
+                  >
+                    {cut.side} ↔
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </>
       )}
     </div>

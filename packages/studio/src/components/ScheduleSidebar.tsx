@@ -273,6 +273,7 @@ export function ScheduleSidebar({
           edgeCount={activeMass.vertices.length}
           massId={activeMass.id}
           ridgeGraph={activeMass.ridgeGraph}
+          roofCuts={activeMass.roofCuts}
           dispatch={dispatch}
         />
       )}
@@ -282,8 +283,8 @@ export function ScheduleSidebar({
         <OpeningsTable mass={activeMass} dispatch={dispatch} />
       )}
 
-      {/* Per-face readouts in custom roof mode */}
-      {activeMass?.ridgeGraph && schedule && (() => {
+      {/* Per-face readouts in cuts or custom roof mode */}
+      {(activeMass?.ridgeGraph || activeMass?.roofCuts?.length) && schedule && (() => {
         const roofRows = schedule.surfaces.filter(
           (r: SurfaceRow) => r.mass === activeMass.id && r.type === "roof",
         );
