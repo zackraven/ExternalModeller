@@ -6,7 +6,7 @@
  */
 
 import type { Mass, Face, Vec3 } from "../types.js";
-import { ensureCCW, newell } from "../geometry.js";
+import { ensureCCW, newell, snapVec3 } from "../geometry.js";
 import { clipSolid, planeFromCut } from "./clipSolid.js";
 import type { SolidFace } from "./clipSolid.js";
 
@@ -88,7 +88,9 @@ export function buildCutSolid(mass: Mass, massId: string): Face[] {
   let roofIndex = 0;
 
   for (const sf of clipped) {
-    const { polygon, tags } = sf;
+    // Snap interpolated vertices to match parametric pipeline precision
+    const polygon = sf.polygon.map(snapVec3);
+    const { tags } = sf;
     const { area, normal } = newell(polygon);
 
     if (tags.source === "cut") {
