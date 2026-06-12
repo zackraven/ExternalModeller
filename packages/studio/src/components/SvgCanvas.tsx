@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useMemo, type Dispatch } from "react";
-import type { Vec2 } from "@sap-geometry/core";
+import type { Vec2, RoofCut } from "@sap-geometry/core";
 import { clientToWorld } from "../lib/svgCoords";
-import { snapPoint, snapToGrid, pointInPolygon, snapToMasses } from "../lib/snap";
+import { snapPoint, snapToGrid, pointInPolygon, snapToMasses, nearestPointOnSegment } from "../lib/snap";
 import { GRID_STEP, SNAP_TOLERANCE, ORTHO_TOLERANCE_DEG, CLOSE_RADIUS } from "../lib/constants";
 import { roofPlanLines } from "../lib/ridgeGraph";
 import type { RidgeGraph, RidgeNode } from "../lib/ridgeGraph";
@@ -23,6 +23,7 @@ interface ViewBox {
 
 const INITIAL_VIEWBOX: ViewBox = { x: -5, y: -5, w: 30, h: 30 };
 const ZOOM_FACTOR = 1.1;
+let _cutCounter = 0;
 
 function polygonArea(verts: Vec2[]): number {
   let a = 0;
@@ -48,9 +49,25 @@ export function SvgCanvas({ masses, activeMassId, dispatch }: SvgCanvasProps) {
   const [ridgeHoverNodeId, setRidgeHoverNodeId] = useState<string | null>(null);
   const [ridgeSelectedSegment, setRidgeSelectedSegment] = useState<{ from: string; to: string } | null>(null);
 
+  // Cut interaction state
+  const [selectedCutId, setSelectedCutId] = useState<string | null>(null);
+  const [cutDrag, setCutDrag] = useState<
+    | { mode: "endpoint"; cutId: string; endpoint: "a" | "b" }
+    | { mode: "body"; cutId: string; origA: Vec2; origB: Vec2; origMouse: Vec2 }
+    | null
+  >(null);
+  const [cutHover, setCutHover] = useState<
+    | { type: "endpoint"; cutId: string; endpoint: "a" | "b" }
+    | { type: "line"; cutId: string }
+    | null
+  >(null);
+  const [addCutStart, setAddCutStart] = useState<Vec2 | null>(null);
+
   const activeMass = masses.find((m) => m.id === activeMassId) ?? null;
   const isDrawing = activeMass !== null && !activeMass.closed;
   const ridgeGraph = activeMass?.ridgeGraph ?? null;
+  const isCutsMode = !!(activeMass?.closed && activeMass.roof.type === "cuts");
+  const roofCuts = activeMass?.roofCuts ?? [];
 
   const lastVertex =
     isDrawing && activeMass.vertices.length > 0
@@ -109,6 +126,31 @@ export function SvgCanvas({ masses, activeMassId, dispatch }: SvgCanvasProps) {
         return;
       }
 
+      // Cut endpoint/body dragging
+      if (cutDrag !== null && activeMassId) {
+        const snapped = snapToGrid(world, GRID_STEP);
+        if (cutDrag.mode === "endpoint") {
+          dispatch({
+            type: "UPDATE_CUT",
+            massId: activeMassId,
+            cutId: cutDrag.cutId,
+            patch: { [cutDrag.endpoint]: snapped as Vec2 },
+          });
+        } else {
+          const dx = snapped[0] - snapToGrid(cutDrag.origMouse, GRID_STEP)[0];
+          const dy = snapped[1] - snapToGrid(cutDrag.origMouse, GRID_STEP)[1];
+          const newA: Vec2 = [cutDrag.origA[0] + dx, cutDrag.origA[1] + dy];
+          const newB: Vec2 = [cutDrag.origB[0] + dx, cutDrag.origB[1] + dy];
+          dispatch({
+            type: "UPDATE_CUT",
+            massId: activeMassId,
+            cutId: cutDrag.cutId,
+            patch: { a: newA, b: newB },
+          });
+        }
+        return;
+      }
+
       // Vertex dragging when closed
       if (dragIndex !== null && dragMassId !== null) {
         const snapped = snapToGrid(world, GRID_STEP);
@@ -129,6 +171,41 @@ export function SvgCanvas({ masses, activeMassId, dispatch }: SvgCanvasProps) {
         }
         setRidgeHoverNodeId(nearestNode);
         if (nearestNode) return;
+      }
+
+      // Cut hover detection (takes priority in cuts mode)
+      if (isCutsMode && roofCuts.length > 0) {
+        let bestHover: typeof cutHover = null;
+        let bestDist = hitRadius;
+        for (const cut of roofCuts) {
+          // Check endpoints first (higher priority)
+          for (const ep of ["a", "b"] as const) {
+            const pt = cut[ep];
+            const d = Math.hypot(world[0] - pt[0], world[1] - pt[1]);
+            if (d < bestDist) {
+              bestDist = d;
+              bestHover = { type: "endpoint", cutId: cut.id, endpoint: ep };
+            }
+          }
+        }
+        if (!bestHover) {
+          // Check line bodies
+          bestDist = hitRadius;
+          for (const cut of roofCuts) {
+            const nearest = nearestPointOnSegment(world, cut.a, cut.b);
+            const d = Math.hypot(world[0] - nearest[0], world[1] - nearest[1]);
+            if (d < bestDist) {
+              bestDist = d;
+              bestHover = { type: "line", cutId: cut.id };
+            }
+          }
+        }
+        setCutHover(bestHover);
+        if (bestHover) {
+          // Update cursor for add-cut mode
+          if (addCutStart) setCursorPos(snapToGrid(world, GRID_STEP));
+          return;
+        }
       }
 
       // Vertex hover detection for active closed mass
@@ -161,11 +238,16 @@ export function SvgCanvas({ masses, activeMassId, dispatch }: SvgCanvasProps) {
 
         setCursorPos(snapped);
       }
+
+      // Cuts mode: track cursor for add-cut preview
+      if (isCutsMode && addCutStart) {
+        setCursorPos(snapToGrid(world, GRID_STEP));
+      }
     },
     [
       activeMass, activeMassId, isDrawing, lastVertex, isPanning,
       dragIndex, dragMassId, ridgeDragNodeId, ridgeGraph,
-      masses, hitRadius, dispatch,
+      masses, hitRadius, dispatch, isCutsMode, cutDrag, addCutStart, roofCuts,
     ],
   );
 
@@ -183,11 +265,57 @@ export function SvgCanvas({ masses, activeMassId, dispatch }: SvgCanvasProps) {
         return;
       }
 
-      // Closed mode: check if clicking on an inactive mass to select it
       if (!svgRef.current) return;
       const world = clientToWorld(e.clientX, e.clientY, svgRef.current);
 
-      // Find all closed masses containing the click, pick smallest area
+      // Cuts mode: select cut or add cut via two-click flow
+      if (isCutsMode && activeMassId) {
+        const snapped = snapToGrid(world, GRID_STEP);
+
+        // If hovering a cut line/endpoint, select it
+        if (cutHover) {
+          setSelectedCutId(cutHover.cutId);
+          setAddCutStart(null);
+          return;
+        }
+
+        // Two-click add cut flow
+        if (addCutStart) {
+          // Second click: complete the cut
+          const a = addCutStart;
+          const b = snapped;
+          // Determine side: roof should rise toward footprint centroid
+          const verts = activeMass!.vertices;
+          const cx = verts.reduce((s, v) => s + v[0], 0) / verts.length;
+          const cy = verts.reduce((s, v) => s + v[1], 0) / verts.length;
+          const dx = b[0] - a[0];
+          const dy = b[1] - a[1];
+          const len = Math.hypot(dx, dy);
+          if (len < 1e-6) { setAddCutStart(null); return; }
+          // Left side inward: (-dy, dx) / len
+          const inwardX = -dy / len;
+          const inwardY = dx / len;
+          const midX = (a[0] + b[0]) / 2;
+          const midY = (a[1] + b[1]) / 2;
+          const dotC = (cx - midX) * inwardX + (cy - midY) * inwardY;
+          const side: "left" | "right" = dotC >= 0 ? "left" : "right";
+          _cutCounter++;
+          const cut: RoofCut = { id: `cut_${_cutCounter}`, a, b, side, pitch: 35 };
+          dispatch({ type: "ADD_CUT", massId: activeMassId, cut });
+          setSelectedCutId(cut.id);
+          setAddCutStart(null);
+          setCursorPos(null);
+          return;
+        }
+
+        // First click: start add cut
+        setAddCutStart(snapped);
+        setCursorPos(null);
+        setSelectedCutId(null);
+        return;
+      }
+
+      // Closed mode: check if clicking on an inactive mass to select it
       let bestMass: MassDesign | null = null;
       let bestArea = Infinity;
       for (const mass of masses) {
@@ -214,7 +342,8 @@ export function SvgCanvas({ masses, activeMassId, dispatch }: SvgCanvasProps) {
         dispatch({ type: "ADD_VERTEX", vertex: snapped });
       }
     },
-    [isDrawing, cursorPos, isPanning, isNearClose, firstVertex, masses, activeMassId, dispatch],
+    [isDrawing, cursorPos, isPanning, isNearClose, firstVertex, masses, activeMassId,
+     dispatch, isCutsMode, cutHover, addCutStart, activeMass],
   );
 
   const handleWheel = useCallback(
@@ -248,6 +377,23 @@ export function SvgCanvas({ masses, activeMassId, dispatch }: SvgCanvasProps) {
         return;
       }
 
+      // Left click on hovered cut endpoint/line starts cut drag
+      if (e.button === 0 && isCutsMode && cutHover && !addCutStart) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (cutHover.type === "endpoint") {
+          setCutDrag({ mode: "endpoint", cutId: cutHover.cutId, endpoint: cutHover.endpoint });
+        } else {
+          // Body drag: find the cut and record starting positions
+          const cut = roofCuts.find((c) => c.id === cutHover.cutId);
+          if (cut && svgRef.current) {
+            const w = clientToWorld(e.clientX, e.clientY, svgRef.current);
+            setCutDrag({ mode: "body", cutId: cut.id, origA: cut.a, origB: cut.b, origMouse: w });
+          }
+        }
+        return;
+      }
+
       // Left click on hovered ridge node starts ridge drag
       if (e.button === 0 && ridgeHoverNodeId !== null) {
         e.preventDefault();
@@ -264,7 +410,8 @@ export function SvgCanvas({ masses, activeMassId, dispatch }: SvgCanvasProps) {
         setDragMassId(activeMassId);
       }
     },
-    [viewBox, activeMass, activeMassId, hoverIndex, ridgeHoverNodeId],
+    [viewBox, activeMass, activeMassId, hoverIndex, ridgeHoverNodeId,
+     isCutsMode, cutHover, addCutStart, roofCuts],
   );
 
   const handleMouseUp = useCallback(
@@ -272,6 +419,9 @@ export function SvgCanvas({ masses, activeMassId, dispatch }: SvgCanvasProps) {
       if (e.button === 1 || e.button === 2) {
         setIsPanning(false);
         panStart.current = null;
+      }
+      if (e.button === 0 && cutDrag !== null) {
+        setCutDrag(null);
       }
       if (e.button === 0 && ridgeDragNodeId !== null) {
         setRidgeDragNodeId(null);
@@ -281,11 +431,21 @@ export function SvgCanvas({ masses, activeMassId, dispatch }: SvgCanvasProps) {
         setDragMassId(null);
       }
     },
-    [dragIndex, ridgeDragNodeId],
+    [dragIndex, ridgeDragNodeId, cutDrag],
   );
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (addCutStart) { setAddCutStart(null); setCursorPos(null); }
+        if (selectedCutId) setSelectedCutId(null);
+        return;
+      }
+      if (e.key === "Delete" && isCutsMode && selectedCutId && activeMassId) {
+        dispatch({ type: "DELETE_CUT", massId: activeMassId, cutId: selectedCutId });
+        setSelectedCutId(null);
+        return;
+      }
       if (e.key === "Delete" && ridgeSelectedSegment && activeMassId) {
         dispatch({
           type: "REMOVE_RIDGE_SEGMENT",
@@ -296,7 +456,7 @@ export function SvgCanvas({ masses, activeMassId, dispatch }: SvgCanvasProps) {
         setRidgeSelectedSegment(null);
       }
     },
-    [ridgeSelectedSegment, activeMassId, dispatch],
+    [ridgeSelectedSegment, activeMassId, dispatch, addCutStart, selectedCutId, isCutsMode],
   );
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
@@ -327,7 +487,12 @@ export function SvgCanvas({ masses, activeMassId, dispatch }: SvgCanvasProps) {
 
   // Cursor style
   let cursorStyle: string | undefined;
-  if (ridgeDragNodeId !== null) cursorStyle = "grabbing";
+  if (cutDrag !== null) cursorStyle = "grabbing";
+  else if (cutHover?.type === "endpoint") cursorStyle = "grab";
+  else if (cutHover?.type === "line") cursorStyle = "move";
+  else if (isCutsMode && addCutStart) cursorStyle = "crosshair";
+  else if (isCutsMode) cursorStyle = "crosshair";
+  else if (ridgeDragNodeId !== null) cursorStyle = "grabbing";
   else if (ridgeHoverNodeId !== null) cursorStyle = "grab";
   else if (activeMass?.closed) {
     if (dragIndex !== null) cursorStyle = "grabbing";
@@ -408,6 +573,137 @@ export function SvgCanvas({ masses, activeMassId, dispatch }: SvgCanvasProps) {
             cx={cursorPos[0]}
             cy={cursorPos[1]}
             r={vertexR}
+          />
+        )}
+
+        {/* ── Cuts overlay ── */}
+        {isCutsMode && roofCuts.length > 0 && (
+          <g className="svg-cuts-overlay">
+            {roofCuts.map((cut) => {
+              const isSelected = selectedCutId === cut.id;
+              const isDragging = cutDrag?.cutId === cut.id;
+              const isLineHovered = cutHover?.type === "line" && cutHover.cutId === cut.id;
+
+              // Perpendicular tick on rising side
+              const dx = cut.b[0] - cut.a[0];
+              const dy = cut.b[1] - cut.a[1];
+              const len = Math.hypot(dx, dy);
+              const tickLen = Math.max(0.3, worldPerPx * 12);
+              let tickLine = null;
+              if (len > 1e-6) {
+                const ux = dx / len;
+                const uy = dy / len;
+                // Inward direction depends on side
+                const ix = cut.side === "left" ? -uy : uy;
+                const iy = cut.side === "left" ? ux : -ux;
+                const mx = (cut.a[0] + cut.b[0]) / 2;
+                const my = (cut.a[1] + cut.b[1]) / 2;
+                tickLine = (
+                  <line
+                    x1={mx}
+                    y1={my}
+                    x2={mx + ix * tickLen}
+                    y2={my + iy * tickLen}
+                    stroke={isSelected ? "#ff6b81" : "#9b59b6"}
+                    strokeWidth={strokeW * 1.5}
+                    strokeLinecap="round"
+                    pointerEvents="none"
+                  />
+                );
+              }
+
+              return (
+                <g key={`cut-${cut.id}`}>
+                  {/* Eaves line */}
+                  <line
+                    x1={cut.a[0]}
+                    y1={cut.a[1]}
+                    x2={cut.b[0]}
+                    y2={cut.b[1]}
+                    stroke={isSelected ? "#ff6b81" : "#9b59b6"}
+                    strokeWidth={strokeW * (isSelected || isLineHovered ? 3 : 2)}
+                    strokeLinecap="round"
+                    style={{ cursor: "pointer" }}
+                    pointerEvents="stroke"
+                  />
+                  {tickLine}
+                  {/* Endpoint A */}
+                  <circle
+                    cx={cut.a[0]}
+                    cy={cut.a[1]}
+                    r={
+                      (cutHover?.type === "endpoint" && cutHover.cutId === cut.id && cutHover.endpoint === "a") || isDragging
+                        ? hoverR
+                        : vertexR
+                    }
+                    fill={isSelected ? "#ff6b81" : "#9b59b6"}
+                    stroke="#fff"
+                    strokeWidth={strokeW * 0.5}
+                    style={{ cursor: "grab" }}
+                    pointerEvents="auto"
+                  />
+                  {/* Endpoint B */}
+                  <circle
+                    cx={cut.b[0]}
+                    cy={cut.b[1]}
+                    r={
+                      (cutHover?.type === "endpoint" && cutHover.cutId === cut.id && cutHover.endpoint === "b") || isDragging
+                        ? hoverR
+                        : vertexR
+                    }
+                    fill={isSelected ? "#ff6b81" : "#9b59b6"}
+                    stroke="#fff"
+                    strokeWidth={strokeW * 0.5}
+                    style={{ cursor: "grab" }}
+                    pointerEvents="auto"
+                  />
+                  {/* Pitch label */}
+                  {len > 1e-6 && (
+                    <text
+                      x={(cut.a[0] + cut.b[0]) / 2}
+                      y={(cut.a[1] + cut.b[1]) / 2}
+                      transform={`scale(1,-1) translate(0,${-2 * (cut.a[1] + cut.b[1]) / 2})`}
+                      fill={isSelected ? "#ff6b81" : "#9b59b6"}
+                      opacity={0.9}
+                      style={{ fontSize: `${Math.max(0.3, worldPerPx * 10)}px` }}
+                      dominantBaseline="central"
+                      textAnchor="middle"
+                      dy={`${-worldPerPx * 12}px`}
+                      pointerEvents="none"
+                    >
+                      {cut.pitch}°{cut.eavesZ !== undefined ? ` z=${cut.eavesZ.toFixed(1)}` : ""}
+                    </text>
+                  )}
+                </g>
+              );
+            })}
+          </g>
+        )}
+
+        {/* Add-cut preview line */}
+        {isCutsMode && addCutStart && cursorPos && (
+          <line
+            x1={addCutStart[0]}
+            y1={addCutStart[1]}
+            x2={cursorPos[0]}
+            y2={cursorPos[1]}
+            stroke="#9b59b6"
+            strokeWidth={strokeW * 1.5}
+            strokeDasharray={`${worldPerPx * 4} ${worldPerPx * 3}`}
+            pointerEvents="none"
+          />
+        )}
+
+        {/* Add-cut first point indicator */}
+        {isCutsMode && addCutStart && (
+          <circle
+            cx={addCutStart[0]}
+            cy={addCutStart[1]}
+            r={vertexR}
+            fill="#9b59b6"
+            stroke="#fff"
+            strokeWidth={strokeW * 0.5}
+            pointerEvents="none"
           />
         )}
 
