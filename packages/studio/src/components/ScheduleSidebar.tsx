@@ -278,6 +278,23 @@ export function ScheduleSidebar({
         />
       )}
 
+      {/* UNCUT_TOP warning banner for cuts mode */}
+      {activeMass?.roofCuts?.length && schedule && (() => {
+        const hasUncutTop = schedule.surfaces.some(
+          (s: SurfaceRow) => s.mass === activeMass.id && s.type === "roof" && s.tilt === 0,
+        );
+        if (!hasUncutTop) return null;
+        return (
+          <div style={{
+            background: "#8b0000", color: "#fff", padding: "8px 10px",
+            borderRadius: 4, margin: "8px 0", fontSize: "0.85em",
+          }}>
+            <strong>UNCUT TOP</strong>: The roof still has a surviving flat
+            top face. Add more cuts to fully define the roof shape.
+          </div>
+        );
+      })()}
+
       {/* Openings table for active mass */}
       {activeMass?.closed && activeMass.openings?.length && (
         <OpeningsTable mass={activeMass} dispatch={dispatch} />
