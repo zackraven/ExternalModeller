@@ -1,5 +1,5 @@
 import type { Dispatch } from "react";
-import type { RoofCut } from "@sap-geometry/core";
+import type { Vec2, RoofCut } from "@sap-geometry/core";
 import type { DesignState, RoofConfig } from "../lib/types";
 import type { RidgeGraph } from "../lib/ridgeGraph";
 import type { StudioAction } from "../lib/reducer";
@@ -8,6 +8,7 @@ interface PropertyControlsProps {
   design: DesignState;
   onDesignChange: (d: DesignState) => void;
   edgeCount: number;
+  vertices: Vec2[];
   massId: string;
   ridgeGraph?: RidgeGraph;
   roofCuts?: RoofCut[];
@@ -15,7 +16,7 @@ interface PropertyControlsProps {
 }
 
 export function PropertyControls({
-  design, onDesignChange, edgeCount, massId, ridgeGraph, roofCuts, dispatch,
+  design, onDesignChange, edgeCount, vertices, massId, ridgeGraph, roofCuts, dispatch,
 }: PropertyControlsProps) {
   const storeyCount = design.storeys.length;
   const isCustomRoof = !!ridgeGraph;
@@ -174,6 +175,43 @@ export function PropertyControls({
       {isCutsMode && (
         <>
           <h3 style={{ marginTop: 12 }}>Cuts</h3>
+          {/* One-click presets */}
+          <div style={{ display: "flex", gap: 4, marginBottom: 8 }}>
+            <button
+              style={{ fontSize: "0.8em", padding: "3px 8px" }}
+              onClick={() => {
+                if (vertices.length < 2) return;
+                // Dual from edge 0: two opposing cuts
+                const a0 = vertices[0];
+                const b0 = vertices[1];
+                // Find the edge opposite to edge 0 (edge at floor(n/2))
+                const oppIdx = Math.floor(vertices.length / 2);
+                const a1 = vertices[(oppIdx + 1) % vertices.length];
+                const b1 = vertices[oppIdx];
+                let id = Date.now();
+                dispatch({ type: "ADD_CUT", massId, cut: { id: `cut_d${id}`, a: a0, b: b0, side: "left", pitch: 35 } });
+                dispatch({ type: "ADD_CUT", massId, cut: { id: `cut_d${id + 1}`, a: a1, b: b1, side: "left", pitch: 35 } });
+              }}
+            >
+              Dual
+            </button>
+            <button
+              style={{ fontSize: "0.8em", padding: "3px 8px" }}
+              onClick={() => {
+                if (vertices.length < 3) return;
+                // Hip: one cut per footprint edge, all rising inward
+                const n = vertices.length;
+                const id = Date.now();
+                for (let i = 0; i < n; i++) {
+                  const a = vertices[i];
+                  const b = vertices[(i + 1) % n];
+                  dispatch({ type: "ADD_CUT", massId, cut: { id: `cut_h${id}_${i}`, a, b, side: "left", pitch: 35 } });
+                }
+              }}
+            >
+              Hip
+            </button>
+          </div>
           <p style={{ fontSize: "0.85em", opacity: 0.7, margin: "4px 0 8px" }}>
             Click canvas to add a cut (2 clicks).
           </p>

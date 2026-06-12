@@ -271,6 +271,7 @@ export function ScheduleSidebar({
           design={design}
           onDesignChange={handleDesignChange}
           edgeCount={activeMass.vertices.length}
+          vertices={activeMass.vertices}
           massId={activeMass.id}
           ridgeGraph={activeMass.ridgeGraph}
           roofCuts={activeMass.roofCuts}
