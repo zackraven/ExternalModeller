@@ -40,6 +40,8 @@ BuildingSpec (JSON) → solve() → Schedule (surfaces, openings, junctions, tot
 | `openings.ts` | `placeOpenings(faces, mass, massId)` | Mutates faces array, adds FaceOpening entries |
 | `abutment.ts` | `detectAbutments(faces)` | Tags shared footprint-edge walls as `"party"` adjacency |
 | `occlusion.ts` | `computeOcclusion(faces)` | Cross-mass face occlusion via Sutherland-Hodgman clipping. Sets `face.occludedArea`. Exports `clipPolygon` |
+| `clipSolid.ts` | `clipSolid(solid, plane)`, `planeFromCut(cut, wallTopZ)` | Sutherland-Hodgman solid clipping by half-space. Cap faces tagged `{ source: "cut" }` |
+| `cutRoof.ts` | `buildCutSolid(mass, massId)` | Cut-plane roof: fixed faces (floor+walls) + clipped headroom prism. Used when `roof.type === "cuts"` |
 | `topology.ts` | `buildTopology(faces)` | Half-edge structure: edge A→B paired with twin B→A |
 
 ### Extract pipeline (`src/extract/`)
@@ -66,6 +68,11 @@ BuildingSpec (JSON) → solve() → Schedule (surfaces, openings, junctions, tot
 - `customRoof.test.ts` — custom roof face generation, gable walls, face IDs
 - `suggestRoof.test.ts` — parametric-to-explicit conversion, round-trip equivalence
 - `validateCustomRoof.test.ts` — planarity, altitude, degenerate, coverage validation
+- `clipSolid.test.ts` — Sutherland-Hodgman solid clipping (36 tests)
+- `cutEquivalence.test.ts` — cut-based vs parametric schedule equivalence (3 tests)
+- `cutFixtures.test.ts` — saltbox, half-hip, mansard fixture validation (25 tests)
+- `cutJunctions.test.ts` — cut-roof junction sanity (8 tests)
+- `cutDormer.test.ts` — rooflight on cut-roof slopes (5 tests)
 - `cli.test.ts` — CLI integration tests via subprocess (9 tests)
 
 ### Fixtures (`fixtures/`)
@@ -79,6 +86,9 @@ BuildingSpec (JSON) → solve() → Schedule (surfaces, openings, junctions, tot
 - `two-box-party.spec.json` — two 10×6 boxes sharing an edge (party wall)
 - `church.spec.json` — nave (20×10, dual 40°) + tower (4×4, 3 storeys, hip 75°), cross-mass occlusion
 - `hello-box-custom-dual.spec.json` — hello-box dual-pitch expressed as custom roof faces
+- `box-saltbox.spec.json` — 10×6, 2 cuts: south 45°, north 25° (asymmetric dual)
+- `box-halfhip.spec.json` — 10×6, 4 cuts: south/north 35° + east/west 35° with eavesZ offset (half-hip)
+- `box-mansard.spec.json` — 10×6, 4 cuts: lower 70° + upper 25° with eavesZ break (mansard)
 
 ### Schema & Docs
 
@@ -137,3 +147,28 @@ React + Three.js viewer. `npm run dev` → Vite on localhost:5173.
 **UI**: `PropertyControls` has parametric/custom mode toggle, ridge node z-height inputs. `SvgCanvas` renders ridge segments (gold lines), draggable ridge nodes (gold circles with z-labels), and hip/valley projection lines (gray dashed). `ScheduleSidebar` shows per-face pitch/area/azimuth readouts in custom mode.
 
 **Known issues**: SVG overlay still has visual glitches — the hip/valley lines and ridge node interaction need further polish. Ridge node dragging can produce geometries that cause validation warnings.
+
+### Cut-plane roof system (WO-A through WO-C complete)
+
+**Core engine** (`packages/core/`):
+
+- `src/resolve/clipSolid.ts` — Sutherland-Hodgman solid clipping: `clipSolid(solid, plane)` clips a closed polyhedron by a half-space. Preserves tags on surviving faces, new cap faces get `{ source: "cut" }`. `planeFromCut(cut, wallTopZ)` converts `RoofCut` to `{n, d}` plane.
+- `src/resolve/cutRoof.ts` — `buildCutSolid(mass, massId)`: builds floor + storey walls as fixed faces (never clipped), then a headroom prism (wallTopZ to topZ) that gets clipped by each `RoofCut` plane. Replaces extrudeWalls+buildFloor+buildRoof when `mass.roof.type === "cuts"`.
+- `src/resolve/index.ts` — `resolve()` dispatches to `buildCutSolid()` when roof type is "cuts".
+- `types.ts` — `RoofCut { id, a: Vec2, b: Vec2, side: "left"|"right", pitch: number, eavesZ?: number }`. Roof type union includes `"cuts"`.
+- Fixtures: `box-saltbox.spec.json`, `box-halfhip.spec.json`, `box-mansard.spec.json`.
+- Tests: `clipSolid.test.ts` (36 tests), `cutEquivalence.test.ts` (3), `cutFixtures.test.ts` (25), `cutJunctions.test.ts` (8), `cutDormer.test.ts` (5). Total core tests: 389.
+
+**Studio UI** (`packages/studio/`):
+
+- `lib/types.ts` — `MassDesign.roofCuts?: RoofCut[]`, `RoofConfig.type` includes `"cuts"`.
+- `lib/reducer.ts` — Actions: `ADD_CUT`, `UPDATE_CUT`, `DELETE_CUT`. `massDesignsFromSpec` loads cuts from spec.
+- `lib/specFromVertices.ts` — Emits `{type:'cuts', cuts}` when `roofCuts` present.
+- `components/SvgCanvas.tsx` — Purple cut lines on canvas: draggable endpoints, perpendicular rising-side ticks, pitch labels, two-click add-cut tool, ESC/Delete keyboard shortcuts.
+- `components/PropertyControls.tsx` — Per-cut controls (pitch, eavesZ, side flip, delete). One-click Dual and Hip preset buttons.
+- `components/ScheduleSidebar.tsx` — UNCUT_TOP red warning banner, per-face pitch/area/azimuth readouts in cuts mode.
+
+**Run studio**: `cd packages/studio && npm run dev` → Vite on localhost:5181.
+**Run studio type-check**: `cd packages/studio && npx tsc --noEmit`.
+
+**Pending**: WO-D (multi-mass cut roofs, occlusion verification, cleanup) not yet started.
