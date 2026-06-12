@@ -1,0 +1,17 @@
+{
+  "masses": [
+    {
+      "footprint": [[0,0],[10,0],[10,6],[0,6]],
+      "storeys": [{ "height": 2.4 }],
+      "roof": {
+        "type": "cuts",
+        "cuts": [
+          { "id": "south", "a": [0,0], "b": [10,0], "side": "left", "pitch": 35 },
+          { "id": "north", "a": [10,6], "b": [0,6], "side": "left", "pitch": 35 },
+          { "id": "east",  "a": [10,0], "b": [10,6], "side": "left", "pitch": 35, "eavesZ": 3.4503 },
+          { "id": "west",  "a": [0,6], "b": [0,0], "side": "left", "pitch": 35, "eavesZ": 3.4503 }
+        ]
+      }
+    }
+  ]
+}
