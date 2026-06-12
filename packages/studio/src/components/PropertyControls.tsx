@@ -12,11 +12,12 @@ interface PropertyControlsProps {
   massId: string;
   ridgeGraph?: RidgeGraph;
   roofCuts?: RoofCut[];
+  abutMasses?: { id: string; name: string }[];
   dispatch: Dispatch<StudioAction>;
 }
 
 export function PropertyControls({
-  design, onDesignChange, edgeCount, vertices, massId, ridgeGraph, roofCuts, dispatch,
+  design, onDesignChange, edgeCount, vertices, massId, ridgeGraph, roofCuts, abutMasses, dispatch,
 }: PropertyControlsProps) {
   const storeyCount = design.storeys.length;
   const isCustomRoof = !!ridgeGraph;
@@ -285,6 +286,29 @@ export function PropertyControls({
                     {cut.side} ↔
                   </button>
                 </div>
+                {abutMasses && abutMasses.length > 0 && (
+                  <div className="prop-row">
+                    <label>Copy to</label>
+                    <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                      {abutMasses.map((am) => (
+                        <button
+                          key={am.id}
+                          style={{ fontSize: "0.8em", padding: "2px 6px" }}
+                          onClick={() => {
+                            dispatch({
+                              type: "ADD_CUT",
+                              massId: am.id,
+                              cut: { ...cut, id: `${cut.id}_${am.id}` },
+                            });
+                          }}
+                          title={`Copy this cut to ${am.name}`}
+                        >
+                          {am.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}

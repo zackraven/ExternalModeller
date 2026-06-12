@@ -126,6 +126,31 @@ export function ScheduleSidebar({
   const hasAnyClosedMass = closedMasses.length > 0;
   const isDrawing = activeMass !== null && !activeMass.closed;
 
+  // Detect abutting masses (share a footprint edge with active mass)
+  const abutMasses = activeMass?.closed ? (() => {
+    const SNAP = 1e-4;
+    const edgeKey = (a: [number, number], b: [number, number]) => {
+      const ka = `${(Math.round(a[0] / SNAP) * SNAP).toFixed(4)},${(Math.round(a[1] / SNAP) * SNAP).toFixed(4)}`;
+      const kb = `${(Math.round(b[0] / SNAP) * SNAP).toFixed(4)},${(Math.round(b[1] / SNAP) * SNAP).toFixed(4)}`;
+      return ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`;
+    };
+    const activeEdges = new Set<string>();
+    const v = activeMass.vertices;
+    for (let i = 0; i < v.length; i++) {
+      activeEdges.add(edgeKey(v[i], v[(i + 1) % v.length]));
+    }
+    return closedMasses
+      .filter((m) => {
+        if (m.id === activeMass.id) return false;
+        const mv = m.vertices;
+        for (let i = 0; i < mv.length; i++) {
+          if (activeEdges.has(edgeKey(mv[i], mv[(i + 1) % mv.length]))) return true;
+        }
+        return false;
+      })
+      .map((m) => ({ id: m.id, name: m.name }));
+  })() : [];
+
   // Mode 1: Face or opening selected
   if (selectedFaceId && model) {
     const face = model.faces.find((f) => f.id === selectedFaceId);
@@ -275,6 +300,7 @@ export function ScheduleSidebar({
           massId={activeMass.id}
           ridgeGraph={activeMass.ridgeGraph}
           roofCuts={activeMass.roofCuts}
+          abutMasses={abutMasses}
           dispatch={dispatch}
         />
       )}
