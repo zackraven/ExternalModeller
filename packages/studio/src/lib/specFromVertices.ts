@@ -41,7 +41,10 @@ export function buildSpecFromMasses(masses: MassDesign[]): BuildingSpec {
     .map((m) => {
       let roof: BuildingSpec["masses"][0]["roof"];
 
-      if (m.ridgeGraph && m.ridgeGraph.nodes.length > 0) {
+      if (m.roofCuts && m.roofCuts.length > 0) {
+        // Cut-plane roof
+        roof = { type: "cuts", cuts: m.roofCuts };
+      } else if (m.ridgeGraph && m.ridgeGraph.nodes.length > 0) {
         // Custom roof from ridge graph
         const wallTopZ = m.storeys.reduce((s, st) => s + st.height, 0);
         const customFaces = facesFromRidgeGraph(m.ridgeGraph, m.vertices, wallTopZ);

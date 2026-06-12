@@ -1,9 +1,9 @@
-import type { Vec2, Opening, Component } from "@sap-geometry/core";
+import type { Vec2, Opening, Component, RoofCut } from "@sap-geometry/core";
 import type { RidgeGraph } from "./ridgeGraph";
 import { DEFAULT_STOREY_HEIGHT } from "./constants";
 
 export interface RoofConfig {
-  type: "flat" | "mono" | "dual" | "hip";
+  type: "flat" | "mono" | "dual" | "hip" | "cuts";
   pitch: number;
   ridgeEdge: number;
 }
@@ -34,6 +34,7 @@ export interface MassDesign {
   openings?: Opening[];
   components?: Component[];
   ridgeGraph?: RidgeGraph;
+  roofCuts?: RoofCut[];
 }
 
 export interface StudioState {

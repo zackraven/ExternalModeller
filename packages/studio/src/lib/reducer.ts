@@ -62,7 +62,8 @@ export function massDesignsFromSpec(spec: BuildingSpec): MassDesign[] {
     const id = mass.id ?? generateMassId();
     const roofType = mass.roof?.type ?? "flat";
     const mappedType: RoofConfig["type"] =
-      (roofType === "none" || roofType === "custom") ? "flat" : roofType;
+      roofType === "cuts" ? "cuts"
+      : (roofType === "none" || roofType === "custom") ? "flat" : roofType;
 
     const design: MassDesign = {
       id,
@@ -79,6 +80,9 @@ export function massDesignsFromSpec(spec: BuildingSpec): MassDesign[] {
     };
     if (mass.openings?.length) design.openings = mass.openings;
     if (mass.components?.length) design.components = mass.components;
+    if (roofType === "cuts" && mass.roof?.cuts?.length) {
+      design.roofCuts = mass.roof.cuts;
+    }
     return design;
   });
 }
@@ -295,7 +299,7 @@ export function studioReducer(
         ...state,
         masses: state.masses.map((m) => {
           if (m.id !== action.massId) return m;
-          if (action.mode === "custom") {
+          if (action.mode === "custom" && m.roof.type !== "cuts") {
             // Initialize ridge graph from current parametric roof
             const wallTopZ = m.storeys.reduce((s, st) => s + st.height, 0);
             const rg = ridgeGraphFromParametric(

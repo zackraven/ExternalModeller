@@ -39,9 +39,10 @@ export function PropertyControls({
     onDesignChange({ ...design, roof: { ...design.roof, ...partial } });
   };
 
-  const showPitch = !isCustomRoof && design.roof.type !== "flat";
-  const showRidgeEdge = !isCustomRoof && (design.roof.type === "mono" || design.roof.type === "dual");
-  const canCustomize = design.roof.type !== "flat";
+  const isCutsMode = design.roof.type === "cuts";
+  const showPitch = !isCustomRoof && !isCutsMode && design.roof.type !== "flat";
+  const showRidgeEdge = !isCustomRoof && !isCutsMode && (design.roof.type === "mono" || design.roof.type === "dual");
+  const canCustomize = design.roof.type !== "flat" && !isCutsMode;
 
   return (
     <div className="property-controls">
@@ -86,6 +87,7 @@ export function PropertyControls({
           <option value="mono">mono</option>
           <option value="dual">dual</option>
           <option value="hip">hip</option>
+          <option value="cuts">cuts</option>
         </select>
       </div>
 
