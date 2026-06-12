@@ -5,8 +5,10 @@
  * Produces cap faces from intersection loops.
  */
 
-import type { Vec2, Vec3 } from "../types.js";
+import type { Vec2, Vec3, RoofCut } from "../types.js";
 import { cross, dot, sub, length, normalize, newell } from "../geometry.js";
+
+export type { RoofCut } from "../types.js";
 
 const EPS = 1e-6;
 
@@ -20,15 +22,6 @@ export interface SolidFace {
 export interface Plane {
   n: Vec3;
   d: number;
-}
-
-export interface RoofCut {
-  id: string;
-  a: Vec2;
-  b: Vec2;
-  side: "left" | "right";
-  pitch: number;       // degrees, 1–89.9
-  eavesZ?: number;
 }
 
 // ── planeFromCut ─────────────────────────────────────────────

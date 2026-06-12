@@ -15,6 +15,7 @@ export type {
   Mass,
   Storey,
   Roof,
+  RoofCut,
   CustomRoofFace,
   Opening,
   Component,

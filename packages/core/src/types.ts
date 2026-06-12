@@ -29,11 +29,22 @@ export interface CustomRoofFace {
   polygon: Vec3[];
 }
 
+export interface RoofCut {
+  id: string;
+  a: Vec2;
+  b: Vec2;
+  side: "left" | "right";
+  pitch: number;       // degrees, 1–89.9
+  eavesZ?: number;
+}
+
 export interface Roof {
-  type: "flat" | "mono" | "dual" | "hip" | "none" | "custom";
+  type: "flat" | "mono" | "dual" | "hip" | "none" | "custom" | "cuts";
   pitch?: number;
   ridgeEdge?: number;
   faces?: CustomRoofFace[];  // required when type = "custom"
+  cuts?: RoofCut[];          // required when type = "cuts"
+  headroom?: number;         // extrusion above wallTopZ before cutting; default 12
 }
 
 export interface Opening {

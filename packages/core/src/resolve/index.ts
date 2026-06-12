@@ -2,6 +2,7 @@ import type { BuildingSpec, Face, FaceModel } from "../types.js";
 import { extrudeWalls } from "./walls.js";
 import { buildFloor } from "./floor.js";
 import { buildRoof } from "./roof.js";
+import { buildCutSolid } from "./cutRoof.js";
 import { placeComponents } from "./components.js";
 import { placeOpenings } from "./openings.js";
 import { buildTopology } from "./topology.js";
@@ -15,9 +16,13 @@ export function resolve(spec: BuildingSpec): FaceModel {
     const mass = spec.masses[mi];
     const massId = mass.id ?? `mass_${mi}`;
 
-    faces.push(...extrudeWalls(mass, massId));
-    faces.push(buildFloor(mass, massId));
-    faces.push(...buildRoof(mass, massId));
+    if (mass.roof?.type === "cuts") {
+      faces.push(...buildCutSolid(mass, massId));
+    } else {
+      faces.push(...extrudeWalls(mass, massId));
+      faces.push(buildFloor(mass, massId));
+      faces.push(...buildRoof(mass, massId));
+    }
     placeComponents(faces, mass, massId);
     placeOpenings(faces, mass, massId);
   }

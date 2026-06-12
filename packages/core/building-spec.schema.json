@@ -118,6 +118,41 @@
         }
       }
     },
+    "RoofCut": {
+      "type": "object",
+      "required": ["id", "a", "b", "side", "pitch"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for this cut."
+        },
+        "a": {
+          "$ref": "#/definitions/Vec2",
+          "description": "Eaves line start point."
+        },
+        "b": {
+          "$ref": "#/definitions/Vec2",
+          "description": "Eaves line end point."
+        },
+        "side": {
+          "type": "string",
+          "enum": ["left", "right"],
+          "description": "Which side of directed line a→b the roof rises toward."
+        },
+        "pitch": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 89.9,
+          "description": "Pitch angle in degrees from horizontal."
+        },
+        "eavesZ": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Plane height at the eaves line. Defaults to wall top height."
+        }
+      }
+    },
     "Roof": {
       "type": "object",
       "required": ["type"],
@@ -166,6 +201,27 @@
             }
           },
           "required": ["type", "faces"],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "cuts"
+            },
+            "cuts": {
+              "type": "array",
+              "items": { "$ref": "#/definitions/RoofCut" },
+              "minItems": 1,
+              "description": "Ordered list of plane cuts defining the roof shape."
+            },
+            "headroom": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "description": "Extrusion height above wall top before cutting, in metres. Default 12."
+            }
+          },
+          "required": ["type", "cuts"],
           "additionalProperties": false
         }
       ]

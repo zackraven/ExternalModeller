@@ -228,4 +228,95 @@ describe("Schema — rejects invalid specs", () => {
       }],
     })).toBe(false);
   });
+
+  it("accepts valid cuts roof", () => {
+    expect(validate({
+      masses: [{
+        footprint: [[0, 0], [10, 0], [10, 6], [0, 6]],
+        storeys: [{ height: 2.4 }],
+        roof: {
+          type: "cuts",
+          cuts: [
+            { id: "south", a: [0, 0], b: [10, 0], side: "left", pitch: 35 },
+            { id: "north", a: [10, 6], b: [0, 6], side: "left", pitch: 35 },
+          ],
+        },
+      }],
+    })).toBe(true);
+  });
+
+  it("accepts cuts roof with headroom", () => {
+    expect(validate({
+      masses: [{
+        footprint: [[0, 0], [10, 0], [10, 6], [0, 6]],
+        storeys: [{ height: 2.4 }],
+        roof: {
+          type: "cuts",
+          cuts: [
+            { id: "south", a: [0, 0], b: [10, 0], side: "left", pitch: 35 },
+          ],
+          headroom: 8,
+        },
+      }],
+    })).toBe(true);
+  });
+
+  it("rejects cuts roof missing cuts array", () => {
+    expect(validate({
+      masses: [{
+        footprint: [[0, 0], [10, 0], [10, 6], [0, 6]],
+        storeys: [{ height: 2.4 }],
+        roof: { type: "cuts" },
+      }],
+    })).toBe(false);
+  });
+
+  it("rejects cuts roof with empty cuts array", () => {
+    expect(validate({
+      masses: [{
+        footprint: [[0, 0], [10, 0], [10, 6], [0, 6]],
+        storeys: [{ height: 2.4 }],
+        roof: { type: "cuts", cuts: [] },
+      }],
+    })).toBe(false);
+  });
+
+  it("rejects cut with pitch < 1", () => {
+    expect(validate({
+      masses: [{
+        footprint: [[0, 0], [10, 0], [10, 6], [0, 6]],
+        storeys: [{ height: 2.4 }],
+        roof: {
+          type: "cuts",
+          cuts: [{ id: "c", a: [0, 0], b: [10, 0], side: "left", pitch: 0.5 }],
+        },
+      }],
+    })).toBe(false);
+  });
+
+  it("rejects cut with pitch > 89.9", () => {
+    expect(validate({
+      masses: [{
+        footprint: [[0, 0], [10, 0], [10, 6], [0, 6]],
+        storeys: [{ height: 2.4 }],
+        roof: {
+          type: "cuts",
+          cuts: [{ id: "c", a: [0, 0], b: [10, 0], side: "left", pitch: 90 }],
+        },
+      }],
+    })).toBe(false);
+  });
+
+  it("rejects cut missing required fields", () => {
+    expect(validate({
+      masses: [{
+        footprint: [[0, 0], [10, 0], [10, 6], [0, 6]],
+        storeys: [{ height: 2.4 }],
+        roof: {
+          type: "cuts",
+          cuts: [{ a: [0, 0], b: [10, 0], side: "left", pitch: 35 }],
+        },
+      }],
+    })).toBe(false);
+  });
 });
