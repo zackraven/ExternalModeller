@@ -28,12 +28,12 @@ export function buildCutSolid(mass: Mass, massId: string): Face[] {
   const topZ = wallTopZ + headroom;
   const cuts = mass.roof?.cuts ?? [];
 
-  // ── Build prism ──────────────────────────────────────────────
-  const solid: SolidFace[] = [];
+  // ── Build fixed faces (floor + storey walls — never clipped) ──
+  const fixedFaces: SolidFace[] = [];
 
   // Floor: reversed footprint at z=0, normal (0,0,-1)
   const floorPoly: Vec3[] = [...footprint].reverse().map(([x, y]) => [x, y, 0]);
-  solid.push({ polygon: floorPoly, tags: { type: "floor" } });
+  fixedFaces.push({ polygon: floorPoly, tags: { type: "floor" } });
 
   // Walls per storey per edge
   let zBase = 0;
@@ -49,13 +49,20 @@ export function buildCutSolid(mass: Mass, massId: string): Face[] {
         [b[0], b[1], zTop],
         [a[0], a[1], zTop],
       ];
-      solid.push({
+      fixedFaces.push({
         polygon: poly,
         tags: { type: "wall", edgeIndex: ei, storey: si },
       });
     }
     zBase = zTop;
   }
+
+  // ── Build headroom prism (clippable closed solid) ─────────────
+  const hrPrism: SolidFace[] = [];
+
+  // Bottom cap at wallTopZ (facing down — for solid closure, discarded after clipping)
+  const basePoly: Vec3[] = [...footprint].reverse().map(([x, y]) => [x, y, wallTopZ]);
+  hrPrism.push({ polygon: basePoly, tags: { type: "headroom_base" } });
 
   // Headroom bands: wallTopZ to topZ, per edge
   for (let ei = 0; ei < nEdges; ei++) {
@@ -67,7 +74,7 @@ export function buildCutSolid(mass: Mass, massId: string): Face[] {
       [b[0], b[1], topZ],
       [a[0], a[1], topZ],
     ];
-    solid.push({
+    hrPrism.push({
       polygon: poly,
       tags: { type: "wall", edgeIndex: ei, storey: nStoreys - 1, headroom: true },
     });
@@ -75,19 +82,25 @@ export function buildCutSolid(mass: Mass, massId: string): Face[] {
 
   // Top: footprint at topZ, normal (0,0,+1)
   const topPoly: Vec3[] = footprint.map(([x, y]) => [x, y, topZ]);
-  solid.push({ polygon: topPoly, tags: { type: "top" } });
+  hrPrism.push({ polygon: topPoly, tags: { type: "top" } });
 
-  // ── Apply cuts ───────────────────────────────────────────────
-  let clipped: SolidFace[] = solid;
+  // ── Apply cuts to headroom prism only ──────────────────────────
+  let clipped: SolidFace[] = hrPrism;
   for (const cut of cuts) {
     clipped = clipSolid(clipped, planeFromCut(cut, wallTopZ));
   }
+
+  // Combine fixed faces with clipped headroom (excluding internal base cap)
+  const allFaces = [
+    ...fixedFaces,
+    ...clipped.filter((sf) => sf.tags.type !== "headroom_base"),
+  ];
 
   // ── Classify and convert to Face[] ───────────────────────────
   const faces: Face[] = [];
   let roofIndex = 0;
 
-  for (const sf of clipped) {
+  for (const sf of allFaces) {
     // Snap interpolated vertices to match parametric pipeline precision
     const polygon = sf.polygon.map(snapVec3);
     const { tags } = sf;
