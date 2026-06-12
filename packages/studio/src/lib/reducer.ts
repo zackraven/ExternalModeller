@@ -1,4 +1,4 @@
-import type { Vec2, BuildingSpec, Mass, Opening } from "@sap-geometry/core";
+import type { Vec2, BuildingSpec, Mass, Opening, RoofCut } from "@sap-geometry/core";
 import type { MassDesign, StudioState, RoofConfig } from "./types";
 import type { RidgeGraph } from "./ridgeGraph";
 import { ridgeGraphFromParametric, generateNodeId } from "./ridgeGraph";
@@ -29,7 +29,10 @@ export type StudioAction =
   | { type: "ADD_RIDGE_NODE"; massId: string; pos: Vec2; z: number; connectTo?: string }
   | { type: "REMOVE_RIDGE_NODE"; massId: string; nodeId: string }
   | { type: "ADD_RIDGE_SEGMENT"; massId: string; from: string; to: string }
-  | { type: "REMOVE_RIDGE_SEGMENT"; massId: string; from: string; to: string };
+  | { type: "REMOVE_RIDGE_SEGMENT"; massId: string; from: string; to: string }
+  | { type: "ADD_CUT"; massId: string; cut: RoofCut }
+  | { type: "UPDATE_CUT"; massId: string; cutId: string; patch: Partial<RoofCut> }
+  | { type: "DELETE_CUT"; massId: string; cutId: string };
 
 // ── Helpers ─────────────────────────────────────
 
@@ -413,6 +416,42 @@ export function studioReducer(
               ),
             },
           };
+        }),
+      };
+    }
+
+    case "ADD_CUT": {
+      return {
+        ...state,
+        masses: state.masses.map((m) => {
+          if (m.id !== action.massId) return m;
+          return { ...m, roofCuts: [...(m.roofCuts ?? []), action.cut] };
+        }),
+      };
+    }
+
+    case "UPDATE_CUT": {
+      return {
+        ...state,
+        masses: state.masses.map((m) => {
+          if (m.id !== action.massId || !m.roofCuts) return m;
+          return {
+            ...m,
+            roofCuts: m.roofCuts.map((c) =>
+              c.id === action.cutId ? { ...c, ...action.patch, id: c.id } : c,
+            ),
+          };
+        }),
+      };
+    }
+
+    case "DELETE_CUT": {
+      return {
+        ...state,
+        masses: state.masses.map((m) => {
+          if (m.id !== action.massId || !m.roofCuts) return m;
+          const cuts = m.roofCuts.filter((c) => c.id !== action.cutId);
+          return { ...m, roofCuts: cuts.length > 0 ? cuts : undefined };
         }),
       };
     }
