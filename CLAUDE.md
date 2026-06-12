@@ -171,4 +171,10 @@ React + Three.js viewer. `npm run dev` → Vite on localhost:5173.
 **Run studio**: `cd packages/studio && npm run dev` → Vite on localhost:5181.
 **Run studio type-check**: `cd packages/studio && npx tsc --noEmit`.
 
-**Pending**: WO-D (multi-mass cut roofs, occlusion verification, cleanup) not yet started.
+**WO-D progress** (in progress):
+- WO-D.1 DONE: `crossMassRoof.test.ts` — 13 tests (catslide + side-by-side multi-mass cut roofs, party wall detection, occlusion). Total core tests: 402.
+- WO-D.2 DONE: "Copy cut to mass" button in PropertyControls when abutting mass detected. `abutMasses` prop computed via edge-key matching in ScheduleSidebar.
+- WO-D.3 IN PROGRESS: Ridge-graph cleanup — started removing `ridgeGraph` from `types.ts`. Partial edits stashed (`git stash`). Need to delete `ridgeGraph.ts`, its tests, and remove all ridge references from reducer, specFromVertices, SvgCanvas, PropertyControls, ScheduleSidebar.
+- WO-D.4 PENDING: Write LIMITATIONS.md.
+
+**Files to delete in WO-D.3**: `src/lib/ridgeGraph.ts`, `src/lib/__tests__/ridgeGraph.test.ts`, `src/lib/__tests__/ridgeDebug.test.ts`. Files to edit: `types.ts` (remove `ridgeGraph` field + import), `reducer.ts` (remove ridge actions + imports), `specFromVertices.ts` (remove `facesFromRidgeGraph` import/usage), `SvgCanvas.tsx` (remove ridge overlay code), `PropertyControls.tsx` (remove ridge node controls + `RidgeGraph` import), `ScheduleSidebar.tsx` (remove `ridgeGraph` checks).
