@@ -1,10 +1,8 @@
-import { useState, useRef, useCallback, useMemo, type Dispatch } from "react";
+import { useState, useRef, useCallback, type Dispatch } from "react";
 import type { Vec2, RoofCut } from "@sap-geometry/core";
 import { clientToWorld } from "../lib/svgCoords";
 import { snapPoint, snapToGrid, pointInPolygon, snapToMasses, nearestPointOnSegment } from "../lib/snap";
 import { GRID_STEP, SNAP_TOLERANCE, ORTHO_TOLERANCE_DEG, CLOSE_RADIUS } from "../lib/constants";
-import { roofPlanLines } from "../lib/ridgeGraph";
-import type { RidgeGraph, RidgeNode } from "../lib/ridgeGraph";
 import type { MassDesign } from "../lib/types";
 import type { StudioAction } from "../lib/reducer";
 
@@ -44,11 +42,6 @@ export function SvgCanvas({ masses, activeMassId, dispatch }: SvgCanvasProps) {
   const [dragMassId, setDragMassId] = useState<string | null>(null);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
 
-  // Ridge graph interaction state
-  const [ridgeDragNodeId, setRidgeDragNodeId] = useState<string | null>(null);
-  const [ridgeHoverNodeId, setRidgeHoverNodeId] = useState<string | null>(null);
-  const [ridgeSelectedSegment, setRidgeSelectedSegment] = useState<{ from: string; to: string } | null>(null);
-
   // Cut interaction state
   const [selectedCutId, setSelectedCutId] = useState<string | null>(null);
   const [cutDrag, setCutDrag] = useState<
@@ -65,7 +58,6 @@ export function SvgCanvas({ masses, activeMassId, dispatch }: SvgCanvasProps) {
 
   const activeMass = masses.find((m) => m.id === activeMassId) ?? null;
   const isDrawing = activeMass !== null && !activeMass.closed;
-  const ridgeGraph = activeMass?.ridgeGraph ?? null;
   const isCutsMode = !!(activeMass?.closed && activeMass.roof.type === "cuts");
   const roofCuts = activeMass?.roofCuts ?? [];
 
@@ -90,14 +82,6 @@ export function SvgCanvas({ masses, activeMassId, dispatch }: SvgCanvasProps) {
   const vertexR = Math.max(0.1, worldPerPx * 4);
   const hoverR = Math.max(0.15, worldPerPx * 6);
   const hitRadius = Math.max(0.3, worldPerPx * 8);
-  const ridgeNodeR = Math.max(0.15, worldPerPx * 6);
-  const ridgeHoverR = Math.max(0.2, worldPerPx * 8);
-
-  // Compute hip/valley projection lines for roof plan overlay
-  const hipLines = useMemo(() => {
-    if (!ridgeGraph || !activeMass?.closed || ridgeGraph.nodes.length === 0) return [];
-    return roofPlanLines(ridgeGraph, activeMass.vertices);
-  }, [ridgeGraph, activeMass]);
 
   const handleMouseMove = useCallback(
     (e: React.MouseEvent<SVGSVGElement>) => {
@@ -118,13 +102,6 @@ export function SvgCanvas({ masses, activeMassId, dispatch }: SvgCanvasProps) {
       }
 
       const world = clientToWorld(e.clientX, e.clientY, svgRef.current);
-
-      // Ridge node dragging
-      if (ridgeDragNodeId !== null && activeMassId) {
-        const snapped = snapToGrid(world, GRID_STEP);
-        dispatch({ type: "UPDATE_RIDGE_NODE", massId: activeMassId, nodeId: ridgeDragNodeId, pos: snapped });
-        return;
-      }
 
       // Cut endpoint/body dragging
       if (cutDrag !== null && activeMassId) {
@@ -156,21 +133,6 @@ export function SvgCanvas({ masses, activeMassId, dispatch }: SvgCanvasProps) {
         const snapped = snapToGrid(world, GRID_STEP);
         dispatch({ type: "MOVE_VERTEX", massId: dragMassId, index: dragIndex, pos: snapped });
         return;
-      }
-
-      // Ridge node hover detection (takes priority when ridge graph is active)
-      if (ridgeGraph && ridgeGraph.nodes.length > 0) {
-        let nearestNode: string | null = null;
-        let nearestDist = hitRadius;
-        for (const node of ridgeGraph.nodes) {
-          const d = Math.hypot(world[0] - node.pos[0], world[1] - node.pos[1]);
-          if (d < nearestDist) {
-            nearestDist = d;
-            nearestNode = node.id;
-          }
-        }
-        setRidgeHoverNodeId(nearestNode);
-        if (nearestNode) return;
       }
 
       // Cut hover detection (takes priority in cuts mode)
@@ -246,7 +208,7 @@ export function SvgCanvas({ masses, activeMassId, dispatch }: SvgCanvasProps) {
     },
     [
       activeMass, activeMassId, isDrawing, lastVertex, isPanning,
-      dragIndex, dragMassId, ridgeDragNodeId, ridgeGraph,
+      dragIndex, dragMassId,
       masses, hitRadius, dispatch, isCutsMode, cutDrag, addCutStart, roofCuts,
     ],
   );
@@ -394,14 +356,6 @@ export function SvgCanvas({ masses, activeMassId, dispatch }: SvgCanvasProps) {
         return;
       }
 
-      // Left click on hovered ridge node starts ridge drag
-      if (e.button === 0 && ridgeHoverNodeId !== null) {
-        e.preventDefault();
-        e.stopPropagation();
-        setRidgeDragNodeId(ridgeHoverNodeId);
-        return;
-      }
-
       // Left click on hovered vertex starts drag (when active mass is closed)
       if (e.button === 0 && activeMass?.closed && hoverIndex !== null) {
         e.preventDefault();
@@ -410,7 +364,7 @@ export function SvgCanvas({ masses, activeMassId, dispatch }: SvgCanvasProps) {
         setDragMassId(activeMassId);
       }
     },
-    [viewBox, activeMass, activeMassId, hoverIndex, ridgeHoverNodeId,
+    [viewBox, activeMass, activeMassId, hoverIndex,
      isCutsMode, cutHover, addCutStart, roofCuts],
   );
 
@@ -423,15 +377,12 @@ export function SvgCanvas({ masses, activeMassId, dispatch }: SvgCanvasProps) {
       if (e.button === 0 && cutDrag !== null) {
         setCutDrag(null);
       }
-      if (e.button === 0 && ridgeDragNodeId !== null) {
-        setRidgeDragNodeId(null);
-      }
       if (e.button === 0 && dragIndex !== null) {
         setDragIndex(null);
         setDragMassId(null);
       }
     },
-    [dragIndex, ridgeDragNodeId, cutDrag],
+    [dragIndex, cutDrag],
   );
 
   const handleKeyDown = useCallback(
@@ -446,17 +397,8 @@ export function SvgCanvas({ masses, activeMassId, dispatch }: SvgCanvasProps) {
         setSelectedCutId(null);
         return;
       }
-      if (e.key === "Delete" && ridgeSelectedSegment && activeMassId) {
-        dispatch({
-          type: "REMOVE_RIDGE_SEGMENT",
-          massId: activeMassId,
-          from: ridgeSelectedSegment.from,
-          to: ridgeSelectedSegment.to,
-        });
-        setRidgeSelectedSegment(null);
-      }
     },
-    [ridgeSelectedSegment, activeMassId, dispatch, addCutStart, selectedCutId, isCutsMode],
+    [activeMassId, dispatch, addCutStart, selectedCutId, isCutsMode],
   );
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
@@ -492,8 +434,6 @@ export function SvgCanvas({ masses, activeMassId, dispatch }: SvgCanvasProps) {
   else if (cutHover?.type === "line") cursorStyle = "move";
   else if (isCutsMode && addCutStart) cursorStyle = "crosshair";
   else if (isCutsMode) cursorStyle = "crosshair";
-  else if (ridgeDragNodeId !== null) cursorStyle = "grabbing";
-  else if (ridgeHoverNodeId !== null) cursorStyle = "grab";
   else if (activeMass?.closed) {
     if (dragIndex !== null) cursorStyle = "grabbing";
     else if (hoverIndex !== null) cursorStyle = "grab";
@@ -705,91 +645,6 @@ export function SvgCanvas({ masses, activeMassId, dispatch }: SvgCanvasProps) {
             strokeWidth={strokeW * 0.5}
             pointerEvents="none"
           />
-        )}
-
-        {/* ── Ridge graph overlay ── */}
-        {ridgeGraph && ridgeGraph.nodes.length > 0 && (
-          <g className="svg-ridge-overlay">
-            {/* Hip/valley projection lines (footprint corners → ridge) */}
-            {hipLines.map((line, i) => (
-              <line
-                key={`hip-${i}`}
-                x1={line.from[0]}
-                y1={line.from[1]}
-                x2={line.to[0]}
-                y2={line.to[1]}
-                stroke="#8899aa"
-                strokeWidth={strokeW * 0.8}
-                strokeDasharray={`${worldPerPx * 3} ${worldPerPx * 2}`}
-                opacity={0.5}
-                pointerEvents="none"
-              />
-            ))}
-
-            {/* Ridge segments */}
-            {ridgeGraph.segments.map((seg, si) => {
-              const fromNode = ridgeGraph.nodes.find(n => n.id === seg.from);
-              const toNode = ridgeGraph.nodes.find(n => n.id === seg.to);
-              if (!fromNode || !toNode) return null;
-              const isSelected =
-                ridgeSelectedSegment &&
-                ((ridgeSelectedSegment.from === seg.from && ridgeSelectedSegment.to === seg.to) ||
-                 (ridgeSelectedSegment.from === seg.to && ridgeSelectedSegment.to === seg.from));
-              return (
-                <line
-                  key={`rs-${si}`}
-                  x1={fromNode.pos[0]}
-                  y1={fromNode.pos[1]}
-                  x2={toNode.pos[0]}
-                  y2={toNode.pos[1]}
-                  stroke={isSelected ? "#ff6b81" : "#ffd700"}
-                  strokeWidth={strokeW * 2.5}
-                  strokeLinecap="round"
-                  style={{ cursor: "pointer" }}
-                  pointerEvents="stroke"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setRidgeSelectedSegment(
-                      isSelected ? null : { from: seg.from, to: seg.to },
-                    );
-                  }}
-                />
-              );
-            })}
-
-            {/* Ridge nodes */}
-            {ridgeGraph.nodes.map((node) => {
-              const isDragging = ridgeDragNodeId === node.id;
-              const isHovered = ridgeHoverNodeId === node.id && !isDragging;
-              const r = isDragging || isHovered ? ridgeHoverR : ridgeNodeR;
-              return (
-                <g key={`rn-${node.id}`}>
-                  <circle
-                    cx={node.pos[0]}
-                    cy={node.pos[1]}
-                    r={r}
-                    fill={isDragging ? "#ff6b81" : "#ffd700"}
-                    stroke="#fff"
-                    strokeWidth={strokeW * 0.5}
-                    style={{ cursor: isDragging ? "grabbing" : "grab" }}
-                    pointerEvents="auto"
-                  />
-                  <text
-                    x={node.pos[0] + ridgeHoverR * 1.8}
-                    y={node.pos[1]}
-                    transform={`scale(1,-1) translate(0,${-2 * node.pos[1]})`}
-                    fill="#ffd700"
-                    opacity={0.8}
-                    style={{ fontSize: `${Math.max(0.3, worldPerPx * 10)}px` }}
-                    dominantBaseline="central"
-                    pointerEvents="none"
-                  >
-                    z={node.z.toFixed(1)}
-                  </text>
-                </g>
-              );
-            })}
-          </g>
         )}
       </g>
     </svg>

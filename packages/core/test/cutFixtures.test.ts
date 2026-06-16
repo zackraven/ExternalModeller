@@ -10,6 +10,8 @@
  */
 import { describe, it, expect } from "vitest";
 import { solve } from "../src/solve.js";
+import { resolve } from "../src/resolve/index.js";
+import type { BuildingSpec } from "../src/types.js";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -252,5 +254,70 @@ describe("Box-Mansard — hand-checked", () => {
   it("gable ≈ 20.522", () => {
     // 2 gable faces × (2 lower edges + 2 upper edges)
     expect(junctionLen(schedule, "gable")).toBeCloseTo(20.522, TOL);
+  });
+});
+
+// ── Single-cut exposed ceiling ──────────────────────────────
+//
+// 10×6 box, wallTopZ = 2.4.
+// Single cut from middle: (5,0)→(5,6), side "left", pitch 35°.
+// The roof rises from x=5 toward x=0 (west).
+// East of x=5: headroom fully removed → flat ceiling at wallTopZ.
+//
+// Expected:
+//   Slope face: 5×6 / cos(35°) ≈ 36.617 m²
+//   Flat ceiling: 5×6 = 30 m²
+//   Total roof: ~66.6 m²
+//
+describe("single-cut: exposed ceiling closes the building", () => {
+  const spec: BuildingSpec = {
+    masses: [
+      {
+        footprint: [[0, 0], [10, 0], [10, 6], [0, 6]],
+        storeys: [{ height: 2.4 }],
+        roof: {
+          type: "cuts",
+          cuts: [
+            { id: "c1", a: [5, 0], b: [5, 6], side: "left", pitch: 35 },
+          ],
+        },
+      },
+    ],
+  };
+
+  const model = resolve(spec);
+  const schedule = solve(spec);
+
+  it("has at least one roof face with tilt=0 (flat ceiling)", () => {
+    const flatRoof = schedule.surfaces.filter(
+      (s) => s.type === "roof" && Math.abs(s.tilt) < 1,
+    );
+    expect(flatRoof.length).toBeGreaterThanOrEqual(1);
+    // Flat ceiling ≈ 5×6 = 30 m²
+    const totalFlat = flatRoof.reduce((s, r) => s + r.area, 0);
+    expect(totalFlat).toBeCloseTo(30, 0);
+  });
+
+  it("has a sloped roof face at ~35°", () => {
+    const slopes = schedule.surfaces.filter(
+      (s) => s.type === "roof" && s.tilt > 10,
+    );
+    expect(slopes.length).toBeGreaterThanOrEqual(1);
+    const totalSlope = slopes.reduce((s, r) => s + r.area, 0);
+    expect(totalSlope).toBeCloseTo(36.6, 0);
+  });
+
+  it("total roof ≈ 66.6 m²", () => {
+    expect(schedule.totals.roof).toBeCloseTo(66.6, 0);
+  });
+
+  it("model has no missing faces (floor + walls + roof)", () => {
+    // Should have: 1 floor, 4 storey walls, headroom walls, slope, flat ceiling
+    const roofFaces = model.faces.filter((f) => f.tag.type === "roof");
+    expect(roofFaces.length).toBeGreaterThanOrEqual(2); // slope + flat ceiling
+    const wallFaces = model.faces.filter((f) => f.tag.type === "wall");
+    expect(wallFaces.length).toBeGreaterThanOrEqual(4);
+    const floorFaces = model.faces.filter((f) => f.tag.type === "floor");
+    expect(floorFaces).toHaveLength(1);
   });
 });

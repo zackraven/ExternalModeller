@@ -1,6 +1,5 @@
 import type { Vec2, BuildingSpec } from "@sap-geometry/core";
 import type { DesignState, MassDesign } from "./types";
-import { facesFromRidgeGraph } from "./ridgeGraph";
 import { DEFAULT_STOREY_HEIGHT } from "./constants";
 
 /** Build a minimal BuildingSpec from a closed polygon of vertices. */
@@ -44,11 +43,7 @@ export function buildSpecFromMasses(masses: MassDesign[]): BuildingSpec {
       if (m.roofCuts && m.roofCuts.length > 0) {
         // Cut-plane roof
         roof = { type: "cuts", cuts: m.roofCuts };
-      } else if (m.ridgeGraph && m.ridgeGraph.nodes.length > 0) {
-        // Custom roof from ridge graph
-        const wallTopZ = m.storeys.reduce((s, st) => s + st.height, 0);
-        const customFaces = facesFromRidgeGraph(m.ridgeGraph, m.vertices, wallTopZ);
-        roof = { type: "custom", faces: customFaces };
+        if (m.headroom !== undefined) roof.headroom = m.headroom;
       } else {
         const roofType = m.roof.type;
         roof = { type: roofType };

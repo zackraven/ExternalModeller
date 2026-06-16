@@ -170,6 +170,23 @@ describe("UPDATE_MASS", () => {
     expect(s2.masses[0].storeys).toEqual([{ height: 3.0 }, { height: 2.7 }]);
     expect(s2.masses[0].roof.type).toBe("dual");
   });
+
+  it("sets headroom via patch", () => {
+    const s = dispatchMany(defaultStudioState(), [
+      { type: "ADD_MASS" },
+      { type: "ADD_VERTEX", vertex: [0, 0] },
+      { type: "ADD_VERTEX", vertex: [10, 0] },
+      { type: "ADD_VERTEX", vertex: [10, 6] },
+      { type: "CLOSE_MASS" },
+    ]);
+    const id = s.masses[0].id;
+    const s2 = dispatch(s, {
+      type: "UPDATE_MASS",
+      id,
+      patch: { headroom: 5 },
+    });
+    expect(s2.masses[0].headroom).toBe(5);
+  });
 });
 
 describe("RENAME_MASS", () => {

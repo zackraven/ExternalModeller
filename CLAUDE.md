@@ -73,6 +73,7 @@ BuildingSpec (JSON) → solve() → Schedule (surfaces, openings, junctions, tot
 - `cutFixtures.test.ts` — saltbox, half-hip, mansard fixture validation (25 tests)
 - `cutJunctions.test.ts` — cut-roof junction sanity (8 tests)
 - `cutDormer.test.ts` — rooflight on cut-roof slopes (5 tests)
+- `crossMassRoof.test.ts` — catslide + side-by-side multi-mass cut roofs, party walls, occlusion (13 tests)
 - `cli.test.ts` — CLI integration tests via subprocess (9 tests)
 
 ### Fixtures (`fixtures/`)
@@ -138,17 +139,7 @@ React + Three.js viewer. `npm run dev` → Vite on localhost:5173.
 
 `EditorToolbar.tsx` has Import button (file picker, `.json`) and Export button (downloads `model.spec.json`). `App.tsx` has global paste handler (`ClipboardEvent`) and drag-and-drop on the editor pane. Both validate JSON and dispatch `LOAD_FIXTURE`.
 
-### Studio Phase 4 — Ridge graph roof editor
-
-**Ridge graph** (`ridgeGraph.ts`): `RidgeNode` (id, pos: Vec2, z), `RidgeSegment` (from, to), `RidgeGraph` (nodes, segments). `ridgeGraphFromParametric()` reverse-engineers a ridge graph from `suggestRoof()` output. `facesFromRidgeGraph()` derives `CustomRoofFace[]` using edge-based classification (SLOPE/HIP/GABLE by midpoint projection onto ridge). Non-planar faces are fan-triangulated. `roofPlanLines()` computes hip/valley projection lines for the SVG overlay.
-
-**State**: `MassDesign.ridgeGraph?: RidgeGraph`. When present, `buildSpecFromMasses()` emits `type: "custom"` with faces from `facesFromRidgeGraph()`. Reducer actions: `SET_ROOF_MODE`, `UPDATE_RIDGE_NODE`, `ADD_RIDGE_NODE`, `REMOVE_RIDGE_NODE`, `ADD_RIDGE_SEGMENT`, `REMOVE_RIDGE_SEGMENT`.
-
-**UI**: `PropertyControls` has parametric/custom mode toggle, ridge node z-height inputs. `SvgCanvas` renders ridge segments (gold lines), draggable ridge nodes (gold circles with z-labels), and hip/valley projection lines (gray dashed). `ScheduleSidebar` shows per-face pitch/area/azimuth readouts in custom mode.
-
-**Known issues**: SVG overlay still has visual glitches — the hip/valley lines and ridge node interaction need further polish. Ridge node dragging can produce geometries that cause validation warnings.
-
-### Cut-plane roof system (WO-A through WO-C complete)
+### Cut-plane roof system (WO-A through WO-D complete)
 
 **Core engine** (`packages/core/`):
 
@@ -157,7 +148,7 @@ React + Three.js viewer. `npm run dev` → Vite on localhost:5173.
 - `src/resolve/index.ts` — `resolve()` dispatches to `buildCutSolid()` when roof type is "cuts".
 - `types.ts` — `RoofCut { id, a: Vec2, b: Vec2, side: "left"|"right", pitch: number, eavesZ?: number }`. Roof type union includes `"cuts"`.
 - Fixtures: `box-saltbox.spec.json`, `box-halfhip.spec.json`, `box-mansard.spec.json`.
-- Tests: `clipSolid.test.ts` (36 tests), `cutEquivalence.test.ts` (3), `cutFixtures.test.ts` (25), `cutJunctions.test.ts` (8), `cutDormer.test.ts` (5). Total core tests: 389.
+- Tests: `clipSolid.test.ts` (36 tests), `cutEquivalence.test.ts` (3), `cutFixtures.test.ts` (25), `cutJunctions.test.ts` (8), `cutDormer.test.ts` (5), `crossMassRoof.test.ts` (13). Total core tests: 402.
 
 **Studio UI** (`packages/studio/`):
 
@@ -171,10 +162,8 @@ React + Three.js viewer. `npm run dev` → Vite on localhost:5173.
 **Run studio**: `cd packages/studio && npm run dev` → Vite on localhost:5181.
 **Run studio type-check**: `cd packages/studio && npx tsc --noEmit`.
 
-**WO-D progress** (in progress):
-- WO-D.1 DONE: `crossMassRoof.test.ts` — 13 tests (catslide + side-by-side multi-mass cut roofs, party wall detection, occlusion). Total core tests: 402.
-- WO-D.2 DONE: "Copy cut to mass" button in PropertyControls when abutting mass detected. `abutMasses` prop computed via edge-key matching in ScheduleSidebar.
-- WO-D.3 IN PROGRESS: Ridge-graph cleanup — started removing `ridgeGraph` from `types.ts`. Partial edits stashed (`git stash`). Need to delete `ridgeGraph.ts`, its tests, and remove all ridge references from reducer, specFromVertices, SvgCanvas, PropertyControls, ScheduleSidebar.
-- WO-D.4 PENDING: Write LIMITATIONS.md.
-
-**Files to delete in WO-D.3**: `src/lib/ridgeGraph.ts`, `src/lib/__tests__/ridgeGraph.test.ts`, `src/lib/__tests__/ridgeDebug.test.ts`. Files to edit: `types.ts` (remove `ridgeGraph` field + import), `reducer.ts` (remove ridge actions + imports), `specFromVertices.ts` (remove `facesFromRidgeGraph` import/usage), `SvgCanvas.tsx` (remove ridge overlay code), `PropertyControls.tsx` (remove ridge node controls + `RidgeGraph` import), `ScheduleSidebar.tsx` (remove `ridgeGraph` checks).
+**WO-D complete:**
+- WO-D.1: `crossMassRoof.test.ts` — 13 tests (catslide + side-by-side multi-mass cut roofs, party wall detection, occlusion).
+- WO-D.2: "Copy cut to mass" button in PropertyControls when abutting mass detected. `abutMasses` prop computed via edge-key matching in ScheduleSidebar.
+- WO-D.3: Ridge-graph cleanup — deleted `ridgeGraph.ts`, `ridgeGraph.test.ts`, `ridgeDebug.test.ts`. Removed all ridge references from types, reducer (6 actions), specFromVertices, SvgCanvas, PropertyControls, ScheduleSidebar. Studio tests: 91 passed.
+- WO-D.4: `LIMITATIONS.md` — documents footprint, roof, storey, opening, component, multi-mass, junction, precision, and UI limitations.

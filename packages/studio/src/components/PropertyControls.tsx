@@ -1,7 +1,6 @@
-import type { Dispatch } from "react";
+import { useState, type Dispatch } from "react";
 import type { Vec2, RoofCut } from "@sap-geometry/core";
 import type { DesignState, RoofConfig } from "../lib/types";
-import type { RidgeGraph } from "../lib/ridgeGraph";
 import type { StudioAction } from "../lib/reducer";
 
 interface PropertyControlsProps {
@@ -10,17 +9,16 @@ interface PropertyControlsProps {
   edgeCount: number;
   vertices: Vec2[];
   massId: string;
-  ridgeGraph?: RidgeGraph;
   roofCuts?: RoofCut[];
   abutMasses?: { id: string; name: string }[];
   dispatch: Dispatch<StudioAction>;
 }
 
 export function PropertyControls({
-  design, onDesignChange, edgeCount, vertices, massId, ridgeGraph, roofCuts, abutMasses, dispatch,
+  design, onDesignChange, edgeCount, vertices, massId, roofCuts, abutMasses, dispatch,
 }: PropertyControlsProps) {
+  const [headroomDraft, setHeadroomDraft] = useState(String(design.headroom ?? 12));
   const storeyCount = design.storeys.length;
-  const isCustomRoof = !!ridgeGraph;
 
   const setStoreyCount = (count: number) => {
     const clamped = Math.max(1, Math.min(4, count));
@@ -44,9 +42,8 @@ export function PropertyControls({
   };
 
   const isCutsMode = design.roof.type === "cuts";
-  const showPitch = !isCustomRoof && !isCutsMode && design.roof.type !== "flat";
-  const showRidgeEdge = !isCustomRoof && !isCutsMode && (design.roof.type === "mono" || design.roof.type === "dual");
-  const canCustomize = design.roof.type !== "flat" && !isCutsMode;
+  const showPitch = !isCutsMode && design.roof.type !== "flat";
+  const showRidgeEdge = !isCutsMode && (design.roof.type === "mono" || design.roof.type === "dual");
 
   return (
     <div className="property-controls">
@@ -81,10 +78,6 @@ export function PropertyControls({
           onChange={(e) => {
             const newType = e.target.value as RoofConfig["type"];
             setRoof({ type: newType });
-            // Clear ridge graph when changing type
-            if (isCustomRoof) {
-              dispatch({ type: "SET_ROOF_MODE", massId, mode: "parametric" });
-            }
           }}
         >
           <option value="flat">flat</option>
@@ -94,26 +87,6 @@ export function PropertyControls({
           <option value="cuts">cuts</option>
         </select>
       </div>
-
-      {/* Roof mode toggle */}
-      {canCustomize && (
-        <div className="prop-row">
-          <label>Mode</label>
-          <select
-            value={isCustomRoof ? "custom" : "parametric"}
-            onChange={(e) => {
-              dispatch({
-                type: "SET_ROOF_MODE",
-                massId,
-                mode: e.target.value as "parametric" | "custom",
-              });
-            }}
-          >
-            <option value="parametric">parametric</option>
-            <option value="custom">custom</option>
-          </select>
-        </div>
-      )}
 
       {showPitch && (
         <div className="prop-row">
@@ -142,40 +115,40 @@ export function PropertyControls({
         </div>
       )}
 
-      {/* Ridge node z-height controls (custom mode) */}
-      {isCustomRoof && ridgeGraph.nodes.length > 0 && (
-        <>
-          <h3 style={{ marginTop: 12 }}>Ridge Nodes</h3>
-          {ridgeGraph.nodes.map((node) => (
-            <div className="prop-row" key={node.id}>
-              <label>{node.id}</label>
-              <input
-                type="number"
-                min={0.1}
-                max={20}
-                step={0.1}
-                value={parseFloat(node.z.toFixed(2))}
-                onChange={(e) => {
-                  const z = parseFloat(e.target.value);
-                  if (!isNaN(z) && z > 0) {
-                    dispatch({
-                      type: "UPDATE_RIDGE_NODE",
-                      massId,
-                      nodeId: node.id,
-                      z,
-                    });
-                  }
-                }}
-              />
-            </div>
-          ))}
-        </>
-      )}
-
       {/* Cut-plane roof controls */}
-      {isCutsMode && (
+      {isCutsMode && (() => {
+        const wallTopZ = design.storeys.reduce((s, st) => s + st.height, 0);
+        const hr = design.headroom ?? 12;
+        return (
         <>
           <h3 style={{ marginTop: 12 }}>Cuts</h3>
+          <div className="prop-row">
+            <label>Headroom</label>
+            <input
+              type="text"
+              value={headroomDraft}
+              onChange={(e) => setHeadroomDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  const v = parseFloat(headroomDraft);
+                  if (!isNaN(v) && v > 0) {
+                    onDesignChange({
+                      ...design,
+                      headroom: Math.abs(v - 12) < 0.001 ? undefined : v,
+                    });
+                    setHeadroomDraft(String(v));
+                  } else {
+                    setHeadroomDraft(String(design.headroom ?? 12));
+                  }
+                }
+              }}
+              onBlur={() => setHeadroomDraft(String(design.headroom ?? 12))}
+              style={{ width: 60 }}
+            />
+          </div>
+          <p style={{ fontSize: "0.8em", opacity: 0.6, margin: "2px 0 6px" }}>
+            Prism top: {(wallTopZ + hr).toFixed(1)}m (walls: {wallTopZ.toFixed(1)}m + {hr}m). Lower to create flat top.
+          </p>
           {/* One-click presets */}
           <div style={{ display: "flex", gap: 4, marginBottom: 8 }}>
             <button
@@ -217,7 +190,6 @@ export function PropertyControls({
             Click canvas to add a cut (2 clicks).
           </p>
           {(roofCuts ?? []).map((cut) => {
-            const wallTopZ = design.storeys.reduce((s, st) => s + st.height, 0);
             return (
               <div key={cut.id} style={{ border: "1px solid #444", borderRadius: 4, padding: 6, marginBottom: 6 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
@@ -313,7 +285,8 @@ export function PropertyControls({
             );
           })}
         </>
-      )}
+        );
+      })()}
     </div>
   );
 }

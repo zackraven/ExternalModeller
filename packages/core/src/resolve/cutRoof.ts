@@ -5,10 +5,11 @@
  * Replaces extrudeWalls + buildFloor + buildRoof when mass.roof.type === "cuts".
  */
 
-import type { Mass, Face, Vec3 } from "../types.js";
+import type { Mass, Face, Vec3, Vec2 } from "../types.js";
 import { ensureCCW, newell, snapVec3 } from "../geometry.js";
 import { clipSolid, planeFromCut } from "./clipSolid.js";
 import type { SolidFace } from "./clipSolid.js";
+import polygonClipping from "polygon-clipping";
 
 /**
  * Build a cut-based roof: extrude the footprint into a prism with headroom,
@@ -90,10 +91,56 @@ export function buildCutSolid(mass: Mass, massId: string): Face[] {
     clipped = clipSolid(clipped, planeFromCut(cut, wallTopZ));
   }
 
+  // ── Exposed ceiling: flat roof at wallTopZ where cuts removed headroom ──
+  // When a cut plane dips below wallTopZ on the "far" side, the headroom
+  // prism there is fully removed.  Add a flat face to close the gap.
+  const ceilingFaces: SolidFace[] = [];
+  if (cuts.length > 0) {
+    const survivingBases = clipped.filter(
+      (sf) => sf.tags.type === "headroom_base",
+    );
+
+    if (survivingBases.length === 0) {
+      // All headroom removed → entire footprint is flat ceiling
+      const ceilPoly: Vec3[] = footprint.map(([x, y]) => [x, y, wallTopZ]);
+      ceilingFaces.push({ polygon: ceilPoly, tags: { type: "top" } });
+    } else {
+      // Compute exposed ceiling = footprint minus surviving base cap (2D)
+      const fpRing: [number, number][] = footprint.map(
+        ([x, y]) => [x, y] as [number, number],
+      );
+      const baseRings: [number, number][][][] = survivingBases.map((sf) => {
+        const ring = ensureCCW(
+          sf.polygon.map(([x, y]) => [x, y] as Vec2),
+        ).map(([x, y]) => [x, y] as [number, number]);
+        return [ring];
+      });
+
+      try {
+        const diff = polygonClipping.difference([fpRing], ...baseRings);
+        for (const poly of diff) {
+          const outerRing = poly[0];
+          if (outerRing && outerRing.length >= 3) {
+            let ceilPoly: Vec3[] = outerRing.map(
+              ([x, y]) => [x, y, wallTopZ] as Vec3,
+            );
+            const { normal, area } = newell(ceilPoly);
+            if (area < 1e-6) continue; // skip degenerate
+            if (normal[2] < 0) ceilPoly = [...ceilPoly].reverse();
+            ceilingFaces.push({ polygon: ceilPoly, tags: { type: "top" } });
+          }
+        }
+      } catch {
+        // polygon-clipping failure on degenerate input — skip ceiling
+      }
+    }
+  }
+
   // Combine fixed faces with clipped headroom (excluding internal base cap)
   const allFaces = [
     ...fixedFaces,
     ...clipped.filter((sf) => sf.tags.type !== "headroom_base"),
+    ...ceilingFaces,
   ];
 
   // ── Classify and convert to Face[] ───────────────────────────
