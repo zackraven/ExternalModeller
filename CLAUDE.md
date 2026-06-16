@@ -144,26 +144,32 @@ React + Three.js viewer. `npm run dev` → Vite on localhost:5173.
 **Core engine** (`packages/core/`):
 
 - `src/resolve/clipSolid.ts` — Sutherland-Hodgman solid clipping: `clipSolid(solid, plane)` clips a closed polyhedron by a half-space. Preserves tags on surviving faces, new cap faces get `{ source: "cut" }`. `planeFromCut(cut, wallTopZ)` converts `RoofCut` to `{n, d}` plane.
-- `src/resolve/cutRoof.ts` — `buildCutSolid(mass, massId)`: builds floor + storey walls as fixed faces (never clipped), then a headroom prism (wallTopZ to topZ) that gets clipped by each `RoofCut` plane. Replaces extrudeWalls+buildFloor+buildRoof when `mass.roof.type === "cuts"`.
+- `src/resolve/cutRoof.ts` — `buildCutSolid(mass, massId)`: builds floor + storey walls as fixed faces (never clipped), then a headroom prism (wallTopZ to topZ) that gets clipped by each `RoofCut` plane. After clipping, computes exposed ceiling via `polygon-clipping.difference(footprint, survivingBase)` — adds flat roof face(s) at wallTopZ where cuts fully removed the headroom, closing any gaps. Replaces extrudeWalls+buildFloor+buildRoof when `mass.roof.type === "cuts"`.
 - `src/resolve/index.ts` — `resolve()` dispatches to `buildCutSolid()` when roof type is "cuts".
 - `types.ts` — `RoofCut { id, a: Vec2, b: Vec2, side: "left"|"right", pitch: number, eavesZ?: number }`. Roof type union includes `"cuts"`.
 - Fixtures: `box-saltbox.spec.json`, `box-halfhip.spec.json`, `box-mansard.spec.json`.
-- Tests: `clipSolid.test.ts` (36 tests), `cutEquivalence.test.ts` (3), `cutFixtures.test.ts` (25), `cutJunctions.test.ts` (8), `cutDormer.test.ts` (5), `crossMassRoof.test.ts` (13). Total core tests: 402.
+- Tests: `clipSolid.test.ts` (36 tests), `cutEquivalence.test.ts` (3), `cutFixtures.test.ts` (29), `cutJunctions.test.ts` (8), `cutDormer.test.ts` (5), `crossMassRoof.test.ts` (13). Total core tests: 406.
 
 **Studio UI** (`packages/studio/`):
 
-- `lib/types.ts` — `MassDesign.roofCuts?: RoofCut[]`, `RoofConfig.type` includes `"cuts"`.
-- `lib/reducer.ts` — Actions: `ADD_CUT`, `UPDATE_CUT`, `DELETE_CUT`. `massDesignsFromSpec` loads cuts from spec.
-- `lib/specFromVertices.ts` — Emits `{type:'cuts', cuts}` when `roofCuts` present.
+- `lib/types.ts` — `MassDesign.roofCuts?: RoofCut[]`, `MassDesign.headroom?: number`, `DesignState.headroom?: number`, `RoofConfig.type` includes `"cuts"`.
+- `lib/reducer.ts` — Actions: `ADD_CUT`, `UPDATE_CUT`, `DELETE_CUT`. `massDesignsFromSpec` loads cuts and headroom from spec.
+- `lib/specFromVertices.ts` — Emits `{type:'cuts', cuts, headroom?}` when `roofCuts` present.
 - `components/SvgCanvas.tsx` — Purple cut lines on canvas: draggable endpoints, perpendicular rising-side ticks, pitch labels, two-click add-cut tool, ESC/Delete keyboard shortcuts.
-- `components/PropertyControls.tsx` — Per-cut controls (pitch, eavesZ, side flip, delete). One-click Dual and Hip preset buttons.
-- `components/ScheduleSidebar.tsx` — UNCUT_TOP red warning banner, per-face pitch/area/azimuth readouts in cuts mode.
+- `components/PropertyControls.tsx` — Per-cut controls (pitch, eavesZ, side flip, delete). One-click Dual and Hip preset buttons. Headroom text input (type value, Enter to commit).
+- `components/ScheduleSidebar.tsx` — UNCUT_TOP red warning banner, per-face pitch/area/azimuth readouts in cuts mode. Bridges `headroom` through `DesignState` → `handleDesignChange`.
 
 **Run studio**: `cd packages/studio && npm run dev` → Vite on localhost:5181.
+**Run studio tests**: `cd packages/studio && npx vitest run`.
 **Run studio type-check**: `cd packages/studio && npx tsc --noEmit`.
 
 **WO-D complete:**
 - WO-D.1: `crossMassRoof.test.ts` — 13 tests (catslide + side-by-side multi-mass cut roofs, party wall detection, occlusion).
 - WO-D.2: "Copy cut to mass" button in PropertyControls when abutting mass detected. `abutMasses` prop computed via edge-key matching in ScheduleSidebar.
-- WO-D.3: Ridge-graph cleanup — deleted `ridgeGraph.ts`, `ridgeGraph.test.ts`, `ridgeDebug.test.ts`. Removed all ridge references from types, reducer (6 actions), specFromVertices, SvgCanvas, PropertyControls, ScheduleSidebar. Studio tests: 91 passed.
+- WO-D.3: Ridge-graph cleanup — deleted `ridgeGraph.ts`, `ridgeGraph.test.ts`, `ridgeDebug.test.ts`. Removed all ridge references from types, reducer (6 actions), specFromVertices, SvgCanvas, PropertyControls, ScheduleSidebar.
 - WO-D.4: `LIMITATIONS.md` — documents footprint, roof, storey, opening, component, multi-mass, junction, precision, and UI limitations.
+
+**Post-WO-D fixes:**
+- **Headroom control**: Text input in PropertyControls (cuts mode). Type value, press Enter to commit. Default 12m. Flows through `DesignState.headroom` → `handleDesignChange` → `UPDATE_MASS` → `buildSpecFromMasses` → core `Roof.headroom`. Lower values create flat-top roofs where cuts don't fully intersect the prism. Integration tests in `specRoundTrip.test.ts` (5 tests).
+- **Exposed ceiling fix**: When a cut plane dips below wallTopZ on the far side of the cut line, the headroom prism was fully removed there, leaving a visible hole. Fix: `cutRoof.ts` now computes `polygon-clipping.difference(footprint, survivingHeadroomBase)` after clipping and adds flat roof face(s) at wallTopZ to close gaps. Test: single-cut exposed ceiling in `cutFixtures.test.ts` (4 tests).
+- Studio tests: 97 passed. Core tests: 406 passed.
