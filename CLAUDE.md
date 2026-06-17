@@ -105,7 +105,8 @@ React + Three.js viewer. `npm run dev` → Vite on localhost:5173.
 - `lib/faceGeometry.ts` — `buildFaceGeometry` (with opening holes), `buildOpeningGeometry` (offset overlays)
 - `components/FaceMesh.tsx` — renders face + clickable opening overlays
 - `components/FaceLabel.tsx` + `OpeningLabel` — HTML overlay labels
-- `components/InfoPanel.tsx` — face detail (gross/occluded/openings/net area), opening detail, schedule totals
+- `lib/mergedArea.ts` — `planeKey`, `makeProjection`, `computeMergedGroupInfo` (coplanar face union area), `computeCrossMassOcclusion` (wall/roof volume occlusion via polygon-clipping)
+- `components/InfoPanel.tsx` — face detail (gross/occluded/openings/net area, merged combined area), opening detail, schedule totals
 
 ## Conventions
 
@@ -173,3 +174,24 @@ React + Three.js viewer. `npm run dev` → Vite on localhost:5173.
 - **Headroom control**: Text input in PropertyControls (cuts mode). Type value, press Enter to commit. Default 12m. Flows through `DesignState.headroom` → `handleDesignChange` → `UPDATE_MASS` → `buildSpecFromMasses` → core `Roof.headroom`. Lower values create flat-top roofs where cuts don't fully intersect the prism. Integration tests in `specRoundTrip.test.ts` (5 tests).
 - **Exposed ceiling fix**: When a cut plane dips below wallTopZ on the far side of the cut line, the headroom prism was fully removed there, leaving a visible hole. Fix: `cutRoof.ts` now computes `polygon-clipping.difference(footprint, survivingHeadroomBase)` after clipping and adds flat roof face(s) at wallTopZ to close gaps. Test: single-cut exposed ceiling in `cutFixtures.test.ts` (4 tests).
 - Studio tests: 97 passed. Core tests: 406 passed.
+
+### Cross-mass merged area display and volume occlusion
+
+**Shared utility** (`packages/viewer/src/lib/mergedArea.ts`):
+
+- `planeKey(face)` — plane key using actual normal direction (not canonicalised), so opposite-facing walls get different keys.
+- `makeProjection(normal, sampleVertex)` — 2D/3D projection helpers, drops axis most aligned with normal.
+- `computeMergedGroupInfo(faces, faceId)` — finds coplanar same-direction faces from different masses, computes polygon union area via `polygon-clipping.union()`. Returns `{ unionArea, faceCount, openingArea }` or null if solo.
+- `computeCrossMassOcclusion(faces, faceId)` — computes area hidden by another mass's volume:
+  - **Walls/gables**: intersects the wall plane line with each other mass's footprint (`linePolygonSegments`), checks that the mass extends past the wall into the exterior direction (`hasExterior` guard), builds 2D shadow rectangles (`wallShadowPolygons`), unions all shadows, intersects with the face polygon. Handles full and partial width overlap.
+  - **Flat faces** (roofs/ceilings): unions all taller mass footprints, intersects with face XY projection.
+- Both paths use `intersectFaceWithShadows` which unions shadow polygons first to avoid double-counting across multiple masses.
+
+**Viewer changes** (`packages/viewer/`):
+
+- `BuildingMesh.tsx` — imports `planeKey`/`makeProjection` from `mergedArea`. Groups coplanar same-direction faces from multiple masses into merged union geometries. Wall clipping generalised to handle gable triangles (sort-by-Z for bottom edge, no vertex count guard). Flat roof clipping via `polygon-clipping.difference`.
+- `InfoPanel.tsx` — shows "Combined area" for merged face groups, "Gross/Occluded/Net area" for solo faces using `computeCrossMassOcclusion`.
+
+**Studio changes** (`packages/studio/`):
+
+- `ScheduleSidebar.tsx` — same merged/solo display logic as InfoPanel, imports from `@sap-geometry/viewer/lib/mergedArea`.

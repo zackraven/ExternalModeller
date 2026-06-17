@@ -1,5 +1,6 @@
 import type { FaceModel, Schedule, SurfaceRow, OpeningRow, Face, FaceOpening } from "@sap-geometry/core";
 import { azimuthOf, tiltOf } from "@sap-geometry/core";
+import { computeMergedGroupInfo, computeCrossMassOcclusion } from "../lib/mergedArea";
 
 interface InfoPanelProps {
   model: FaceModel;
@@ -56,7 +57,7 @@ export function InfoPanel({
       return (
         <div className="info-panel">
           <h3>Face Detail</h3>
-          <FaceDetail face={face} azimuth={azimuth} tilt={tilt} />
+          <FaceDetail face={face} model={model} azimuth={azimuth} tilt={tilt} />
         </div>
       );
     }
@@ -98,18 +99,49 @@ export function InfoPanel({
 
 function FaceDetail({
   face,
+  model,
   azimuth,
   tilt,
 }: {
   face: Face;
+  model: FaceModel;
   azimuth: number;
   tilt: number;
 }) {
+  const merged = computeMergedGroupInfo(model.faces, face.id);
+
+  if (merged) {
+    const netArea = merged.unionArea - merged.openingArea;
+    return (
+      <table>
+        <tbody>
+          <tr><td>Name</td><td>{face.id} (+ {merged.faceCount - 1} more)</td></tr>
+          <tr><td>Type</td><td>{face.tag.type}</td></tr>
+          <tr><td>Adjacency</td><td>{face.tag.adjacency}</td></tr>
+          <tr><td>Combined area</td><td>{merged.unionArea.toFixed(2)} m²</td></tr>
+          {merged.openingArea > 0 && (
+            <tr><td>Openings</td><td>{merged.openingArea.toFixed(2)} m²</td></tr>
+          )}
+          {merged.openingArea > 0 && (
+            <tr><td>Net area</td><td>{netArea.toFixed(2)} m²</td></tr>
+          )}
+          <tr>
+            <td>Azimuth</td>
+            <td>{azimuth.toFixed(0)}° ({compassDir(azimuth)})</td>
+          </tr>
+          <tr><td>Tilt</td><td>{tilt.toFixed(0)}°</td></tr>
+        </tbody>
+      </table>
+    );
+  }
+
   const openingArea = face.openings.reduce((s, o) => s + o.area, 0);
   const occluded = face.occludedArea ?? 0;
-  const netArea = face.area - openingArea - occluded;
+  const crossOcclusion = computeCrossMassOcclusion(model.faces, face.id);
+  const totalOccluded = occluded + crossOcclusion;
+  const netArea = face.area - openingArea - totalOccluded;
   const hasOpenings = face.openings.length > 0;
-  const hasDeductions = hasOpenings || occluded > 0;
+  const hasDeductions = hasOpenings || totalOccluded > 0;
 
   return (
     <table>
@@ -118,8 +150,8 @@ function FaceDetail({
         <tr><td>Type</td><td>{face.tag.type}</td></tr>
         <tr><td>Adjacency</td><td>{face.tag.adjacency}</td></tr>
         <tr><td>{hasDeductions ? "Gross area" : "Area"}</td><td>{face.area.toFixed(2)} m²</td></tr>
-        {occluded > 0 && (
-          <tr><td>Occluded</td><td>{occluded.toFixed(2)} m²</td></tr>
+        {totalOccluded > 0 && (
+          <tr><td>Occluded</td><td>{totalOccluded.toFixed(2)} m²</td></tr>
         )}
         {hasOpenings && (
           <tr><td>Openings</td><td>{face.openings.length} ({openingArea.toFixed(2)} m²)</td></tr>

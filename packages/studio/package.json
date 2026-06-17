@@ -13,6 +13,7 @@
     "@react-three/drei": "^10",
     "@react-three/fiber": "^9",
     "earcut": "^3",
+    "polygon-clipping": "^0.15.7",
     "react": "^19",
     "react-dom": "^19",
     "three": "^0.175"
